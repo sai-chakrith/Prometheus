@@ -5,7 +5,6 @@ import SearchBar from './components/SearchBar';
 import ExampleQueries from './components/ExampleQueries';
 import Results from './components/Results';
 import Sidebar from './components/Sidebar';
-import StatusBar from './components/StatusBar';
 import Footer from './components/Footer';
 import axios from 'axios';
 
@@ -20,6 +19,12 @@ function App() {
   React.useEffect(() => {
     checkApiHealth();
   }, []);
+
+  React.useEffect(() => {
+    if (!apiStatus) {
+      window.alert('API is currently offline.');
+    }
+  }, [apiStatus]);
 
   const checkApiHealth = async () => {
     try {
@@ -67,8 +72,6 @@ function App() {
       
       <div className="app-container">
         <main className="main-content">
-          <StatusBar apiStatus={apiStatus} />
-          
           <div className="content-wrapper">
             <SearchBar 
               query={query}
