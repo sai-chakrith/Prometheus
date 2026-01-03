@@ -63,3 +63,15 @@ frontend/build/
 .coverage
 htmlcov/
 .pytest_cache/
+
+# RAGAS Evaluation Results
+evaluation_results*.csv
+evaluation_results*.json
+batch_evaluation*.csv
+batch_evaluation*.json
+comparison_*.csv
+comparison_*.json
+daily_monitoring*.csv
+daily_monitoring*.json
+ablation_study*.csv
+ablation_study*.json
