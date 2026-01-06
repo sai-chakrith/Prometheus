@@ -1,0 +1,64 @@
+version: '3.8'
+
+services:
+  # Backend API Service
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: prometheus-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mount CSV data file
+      - ../dataset/cleaned_funding_synthetic_2010_2025.csv:/app/dataset/cleaned_funding_synthetic_2010_2025.csv:ro
+      # Persist ChromaDB data
+      - chroma_db:/app/chroma_db
+      # Persist database
+      - db_data:/app/data
+    environment:
+      - PYTHONUNBUFFERED=1
+      - LOG_LEVEL=INFO
+      - DEBUG=false
+    env_file:
+      - ./backend/.env
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    networks:
+      - prometheus-network
+
+  # Frontend UI Service
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: prometheus-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - prometheus-network
+
+networks:
+  prometheus-network:
+    driver: bridge
+
+volumes:
+  chroma_db:
+    driver: local
+  db_data:
+    driver: local
