@@ -1,23 +1,9 @@
-# ===========================
 # Python
-# ===========================
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
-*.pyo
-*.pyd
-
-# Virtual environments
-env/
-venv/
-.venv/
-ENV/
-env.bak/
-venv.bak/
-
-# Python distribution / packaging
 build/
 develop-eggs/
 dist/
@@ -30,164 +16,66 @@ parts/
 sdist/
 var/
 wheels/
-pip-wheel-metadata/
-share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
 MANIFEST
+.venv/
+venv/
+ENV/
+env/
 
-# PyInstaller
-*.manifest
-*.spec
+# Database
+*.db
+*.sqlite
+*.sqlite3
 
-# Python testing
-.pytest_cache/
-.coverage
-.coverage.*
-htmlcov/
-.tox/
-.nox/
-.hypothesis/
-nosetests.xml
-coverage.xml
-*.cover
-.cache
+# Logs
+*.log
+logs/
+backend_log.txt
 
-# Jupyter Notebook
-.ipynb_checkpoints
-*.ipynb_checkpoints/
+# Environment
+.env
+.env.local
+.env.*.local
 
-# pyenv
-.python-version
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
 
-# Celery
-celerybeat-schedule
-celerybeat.pid
-
-# ===========================
-# Node.js / Frontend
-# ===========================
+# Node
 node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
-
-# Build outputs
-frontend/dist/
-frontend/dist-ssr/
-frontend/build/
-*.local
-
-# Dependency lock files (optional - remove if you want to track them)
-package-lock.json
-yarn.lock
-pnpm-lock.yaml
-
-# ===========================
-# Database & Vector Stores
-# ===========================
-# ChromaDB
-backend/chroma_db/
-chroma_db/
-*.sqlite3
-*.db
-*.sqlite
-
-# ===========================
-# Environment & Config
-# ===========================
-.env
-.env.*
-!.env.example
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-
-# ===========================
-# IDEs and Editors
-# ===========================
-# VSCode
-.vscode/
-!.vscode/settings.json
-!.vscode/tasks.json
-!.vscode/launch.json
-!.vscode/extensions.json
-
-# IntelliJ IDEA
-.idea/
-*.iws
-*.iml
-*.ipr
-
-# Vim
-*.swp
-*.swo
-*~
-*.swn
-
-# Sublime Text
-*.sublime-project
-*.sublime-workspace
-
-# Visual Studio
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-
-# ===========================
-# Operating System
-# ===========================
-# macOS
-.DS_Store
-.AppleDouble
-.LSOverride
-._*
-
-# Windows
-Thumbs.db
-Thumbs.db:encryptable
-ehthumbs.db
-ehthumbs_vista.db
-Desktop.ini
-$RECYCLE.BIN/
-
-# Linux
-*~
-.directory
-.Trash-*
-
-# ===========================
-# Logs
-# ===========================
-*.log
-logs/
-*.log.*
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-
-# ===========================
-# Data Files (Optional)
-# ===========================
-# Uncomment if you want to exclude large datasets
-# data/
-# *.csv
-# *.json
-# StartUp_FundingScrappingData/
-
-# ===========================
-# Temporary & Misc
-# ===========================
-*.tmp
-*.temp
-*.bak
-*.backup
+.pnpm-debug.log*
+dist/
 .cache/
+
+# Build
+build/
+*.tsbuildinfo
+
+# Test
+coverage/
+.nyc_output/
+test_results*.json
+*.csv
+
+# ChromaDB
+chroma_db/
+
+# Docker
+*.pid
+*.seed
+*.pid.lock
+
+# Temp
 tmp/
 temp/
+*.tmp

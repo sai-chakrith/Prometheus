@@ -1,0 +1,24 @@
+{
+  "generated_date": "2026-01-05 21:57:08",
+  "total_records": 23243,
+  "date_range": "2010-2025",
+  "unique_companies": 181,
+  "unique_sectors": 12,
+  "unique_cities": 22,
+  "total_funding_inr_cr": 3870541.0635681357,
+  "columns": [
+    "Startup Name",
+    "Amount_Cleaned",
+    "Amount_USD",
+    "Amount_INR_Numeric",
+    "Sector_Standardized",
+    "City",
+    "State_Standardized",
+    "Investors' Name",
+    "Funding_Stage",
+    "Date_Parsed",
+    "Year",
+    "Quarter",
+    "Month"
+  ]
+}
