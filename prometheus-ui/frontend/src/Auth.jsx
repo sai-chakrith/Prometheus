@@ -28,7 +28,7 @@ export default function Auth({ onAuthSuccess }) {
 
       if (response.data.success) {
         // Save token to localStorage
-        localStorage.setItem('auth_token', response.data.token);
+        localStorage.setItem('authToken', response.data.token);
         localStorage.setItem('username', response.data.username);
         onAuthSuccess(response.data);
       } else {
@@ -56,7 +56,7 @@ export default function Auth({ onAuthSuccess }) {
   ];
 
   return (
-    <div className="min-h-screen flex overflow-hidden bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
+    <div className="min-h-screen h-screen w-screen flex overflow-hidden bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
       {/* Animated Background */}
       <div className="absolute inset-0 overflow-hidden">
         <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-purple-500/30 rounded-full blur-3xl animate-pulse"></div>
@@ -69,7 +69,7 @@ export default function Auth({ onAuthSuccess }) {
         initial={{ opacity: 0, x: -50 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ duration: 0.8 }}
-        className="hidden lg:flex lg:w-1/2 relative z-10 flex-col justify-center p-12 text-white"
+        className="hidden lg:flex lg:w-1/2 xl:w-3/5 relative z-10 flex-col justify-center items-center p-8 xl:p-16 text-white h-full"
       >
         <div className="max-w-lg">
           <motion.div
@@ -139,14 +139,14 @@ export default function Auth({ onAuthSuccess }) {
       </motion.div>
 
       {/* Right Panel - Auth Form */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 relative z-10">
+      <div className="w-full lg:w-1/2 xl:w-2/5 flex items-center justify-center p-6 md:p-10 lg:p-12 relative z-10 h-full">
         <motion.div
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.5 }}
-          className="w-full max-w-md"
+          className="w-full max-w-lg"
         >
-          <div className="bg-white/10 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/20 p-8">
+          <div className="bg-white/10 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/20 p-8 md:p-10 lg:p-12">
             {/* Mobile Logo */}
             <div className="lg:hidden text-center mb-8">
               <div className="flex items-center justify-center gap-3 mb-2">
