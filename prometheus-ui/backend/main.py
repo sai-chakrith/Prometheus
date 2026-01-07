@@ -42,7 +42,39 @@ limiter = Limiter(key_func=get_remote_address) if Config.RATE_LIMIT_ENABLED else
 app = FastAPI(
     title="Prometheus RAG API",
     version="2.0.0",
-    description="Multilingual Startup Funding Query System with RAG"
+    description="Multilingual Startup Funding Query System with RAG",
+    docs_url="/api/docs",
+    redoc_url="/api/redoc",
+    openapi_url="/api/openapi.json",
+    openapi_tags=[
+        {
+            "name": "Authentication",
+            "description": "User authentication and session management"
+        },
+        {
+            "name": "RAG",
+            "description": "Retrieval-Augmented Generation endpoints for funding queries"
+        },
+        {
+            "name": "Chat",
+            "description": "Chat history and conversation management"
+        },
+        {
+            "name": "Analytics",
+            "description": "Usage analytics and insights"
+        },
+        {
+            "name": "Health",
+            "description": "Service health checks and status"
+        }
+    ],
+    contact={
+        "name": "Prometheus Support",
+        "url": "https://github.com/sai-chakrith/Prometheus"
+    },
+    license_info={
+        "name": "MIT License"
+    }
 )
 
 # Add rate limiter to app state
@@ -306,7 +338,7 @@ def get_company_description(company_name: str, lang: str = "en") -> str:
     
     try:
         response = ollama.generate(
-            model='llama3.1:8b',
+            model=Config.OLLAMA_MODEL,
             prompt=prompt,
             options={
                 'temperature': 0.3,
@@ -367,19 +399,36 @@ def parse_amount_to_numeric(amount_str):
         return 0.0
 
 def format_amount(amount: str) -> str:
-    """Format amount in readable form"""
+    """Format amount in readable form - preserves Indian Rupee format"""
     try:
-        # Extract numeric value
-        num_match = re.search(r'[\d,\.]+', str(amount))
+        amount_str = str(amount).strip()
+        
+        # If already in Indian Rupee format (₹ Cr or ₹ L), preserve it
+        if '₹' in amount_str:
+            return amount_str
+        
+        # If already formatted with Cr or L, preserve it
+        if 'Cr' in amount_str or ' L' in amount_str:
+            return amount_str
+        
+        # Extract numeric value for dollar amounts
+        num_match = re.search(r'[\d,\.]+', amount_str)
         if num_match:
             num_str = num_match.group().replace(',', '')
             num = float(num_str)
             
-            if 'M' in str(amount) or num >= 1_000_000:
-                return f"${num/1_000_000:.1f}M"
-            elif 'K' in str(amount) or num >= 1_000:
-                return f"${num/1_000:.0f}K"
-        return str(amount)
+            # Convert to Indian format (Crores and Lakhs)
+            if num >= 10_000_000:  # 1 Crore or more
+                return f"₹{num/10_000_000:.2f} Cr"
+            elif num >= 100_000:  # 1 Lakh or more
+                return f"₹{num/100_000:.2f} L"
+            elif 'M' in amount_str:
+                return f"${num:.1f}M"
+            elif 'K' in amount_str:
+                return f"${num:.0f}K"
+            else:
+                return f"₹{num:,.0f}"
+        return amount_str
     except:
         return str(amount)
 
@@ -461,7 +510,7 @@ def transliterate_company_name(company_name: str, lang: str) -> str:
             return company_name
         
         response = ollama.generate(
-            model='llama3.1:8b',
+            model=Config.OLLAMA_MODEL,
             prompt=prompts[lang],
             options={
                 'temperature': 0.0,  # Zero temp for consistency
@@ -656,8 +705,20 @@ def generate_template_answer(docs, lang, query, total_amount, total_companies):
     return answer.strip()
 
 def detect_query_type(query: str, lang: str) -> str:
-    """Detect if query is aggregation, comparison, trend, or simple"""
+    """Detect if query is aggregation, comparison, trend, list, or simple"""
     query_lower = query.lower()
+    
+    # List/top N patterns - when user wants a list of companies
+    list_keywords = {
+        'en': ['top', 'list', 'show', 'display', 'best', 'highest', 'lowest', 'companies', 'startups', 'funded'],
+        'hi': ['टॉप', 'शीर्ष', 'दिखाओ', 'कंपनियां', 'स्टार्टअप', 'सूची', 'सबसे'],
+        'te': ['టాప్', 'చూపించు', 'కంపెనీలు', 'స్టార్టప్స్', 'జాబితా', 'అత్యధిక'],
+        'ta': ['முதல்', 'காட்டு', 'நிறுவனங்கள்', 'பட்டியல்', 'சிறந்த'],
+        'kn': ['ಟಾಪ್', 'ತೋರಿಸಿ', 'ಕಂಪನಿಗಳು', 'ಪಟ್ಟಿ', 'ಅತ್ಯುತ್ತಮ'],
+        'mr': ['टॉप', 'दाखवा', 'कंपन्या', 'यादी', 'सर्वोत्तम'],
+        'gu': ['ટોચ', 'બતાવો', 'કંપનીઓ', 'યાદી', 'શ્રેષ્ઠ'],
+        'bn': ['শীর্ষ', 'দেখান', 'কোম্পানি', 'তালিকা', 'সেরা']
+    }
     
     # Comparison patterns
     comparison_keywords = {
@@ -673,8 +734,8 @@ def detect_query_type(query: str, lang: str) -> str:
     
     # Trend/time analysis patterns
     trend_keywords = {
-        'en': ['trend', 'growth', 'over time', 'from', 'to', 'between', 'during'],
-        'hi': ['रुझान', 'वृद्धि', 'से', 'तक'],
+        'en': ['trend', 'growth', 'over time', 'between', 'during'],
+        'hi': ['रुझान', 'वृद्धि'],
         'te': ['ధోరణి', 'పెరుగుదల'],
         'ta': ['போக்கு', 'வளர்ச்சி'],
         'kn': ['ಪ್ರವೃತ್ತಿ', 'ಬೆಳವಣಿಗೆ'],
@@ -695,9 +756,14 @@ def detect_query_type(query: str, lang: str) -> str:
         'bn': ['মোট', 'কত']
     }
     
+    lang_list = list_keywords.get(lang, list_keywords['en'])
     lang_comp = comparison_keywords.get(lang, comparison_keywords['en'])
     lang_trend = trend_keywords.get(lang, trend_keywords['en'])
     lang_total = total_keywords.get(lang, total_keywords['en'])
+    
+    # Check for number + companies pattern (e.g., "top 10 companies")
+    import re
+    has_count = bool(re.search(r'\d+', query))
     
     if any(keyword in query_lower for keyword in lang_comp):
         return 'comparison'
@@ -705,6 +771,10 @@ def detect_query_type(query: str, lang: str) -> str:
         return 'trend'
     elif any(keyword in query_lower for keyword in lang_total):
         return 'aggregation'
+    elif has_count and any(keyword in query_lower for keyword in lang_list):
+        return 'list'  # Explicit list request with count
+    elif any(keyword in query_lower for keyword in lang_list[:3]):  # top, list, show
+        return 'list'
     else:
         return 'simple'
 
@@ -876,8 +946,142 @@ def prometheus_pipeline(query: str, lang: str = "en") -> dict:
     
     logger.info(f"Query received: '{query}' | Language: {lang}")
     
+    # Handle empty or very short queries
+    if not query or len(query.strip()) < 2:
+        return {
+            "answer": "Please provide a valid query about startup funding. For example:\n- 'Show fintech companies'\n- 'Top funded startups in Bangalore'\n- 'फिनटेक कंपनियां दिखाओ'",
+            "sources": []
+        }
+    
+    # Handle very long queries by truncating while preserving key information
+    if len(query) > 500:
+        # Extract key terms from the query
+        query = query[:500]
+        logger.info(f"Query truncated to 500 characters")
+    
     # Check if user is asking about a specific company
     query_lower = query.lower().strip()
+    query_original = query.strip()  # Keep original for Indic script matching
+    
+    # First, check if query contains a known company name directly (handles simple queries like "Swiggy" or "ಸ್ವಿಗ್ಗಿ")
+    known_companies = {
+        # English names
+        'swiggy': 'Swiggy', 'flipkart': 'Flipkart', 'paytm': 'Paytm', 'ola': 'Ola', 
+        'zomato': 'Zomato', 'uber': 'Uber', 'byju': "Byju's", "byju's": "Byju's",
+        'razorpay': 'Razorpay', 'cred': 'CRED', 'phonepe': 'PhonePe', 'meesho': 'Meesho',
+        'unacademy': 'Unacademy', 'nykaa': 'Nykaa', 'lenskart': 'Lenskart', 'zerodha': 'Zerodha',
+        'groww': 'Groww', 'dream11': 'Dream11', 'freshworks': 'Freshworks', 'oyo': 'OYO',
+        'rapido': 'Rapido', 'dunzo': 'Dunzo', 'upgrad': 'upGrad', 'cure.fit': 'Cure.fit',
+        'bigbasket': 'BigBasket', 'udaan': 'Udaan', 'sharechat': 'ShareChat',
+        # Indic script variations
+        'स्विगी': 'Swiggy', 'स्विग्गी': 'Swiggy', 'ಸ್ವಿಗ್ಗಿ': 'Swiggy', 'ಸ್ವಿಗ್ಗೀ': 'Swiggy',
+        'స్విగ్గీ': 'Swiggy', 'ஸ்விகி': 'Swiggy', 'સ્વિગી': 'Swiggy', 'সুইগি': 'Swiggy',
+        'फ्लिपकार्ट': 'Flipkart', 'ఫ్లిప్‌కార్ట్': 'Flipkart', 'ಫ್ಲಿಪ್ಕಾರ್ಟ್': 'Flipkart',
+        'பேடிஎம்': 'Paytm', 'పేటీఎం': 'Paytm', 'ಪೇಟಿಎಂ': 'Paytm', 'পেটিএম': 'Paytm',
+        'ओला': 'Ola', 'ఓలా': 'Ola', 'ಓಲಾ': 'Ola', 'ஓலா': 'Ola',
+        'ज़ोमैटो': 'Zomato', 'జోమాటో': 'Zomato', 'ಜೋಮ್ಯಾಟೋ': 'Zomato', 'ஜொமேட்டோ': 'Zomato',
+    }
+    
+    # Check for direct company name match
+    detected_company = None
+    for company_key, company_english in known_companies.items():
+        if company_key in query_lower or company_key in query_original:
+            detected_company = company_english
+            logger.info(f"Direct company match found: '{company_key}' -> '{company_english}'")
+            break
+    
+    # If direct match found, handle as company query
+    if detected_company:
+        company_exists = df[df['Startup Name'].str.lower() == detected_company.lower()]
+        
+        if not company_exists.empty:
+            # Company found in dataset - generate company summary
+            all_rounds = []
+            total_funding = 0.0
+            
+            for idx, row in company_exists.iterrows():
+                amount_str = row['Amount_Cleaned']
+                amount_numeric = parse_amount_to_numeric(amount_str)
+                if amount_numeric > 0:
+                    total_funding += amount_numeric
+                    all_rounds.append({
+                        "amount": amount_str if amount_str else "Unknown",
+                        "sector": row.get('Sector', 'Unknown'),
+                        "city": row.get('City', 'Unknown'),
+                        "state": row.get('State_Standardized', 'Unknown'),
+                        "year": str(row.get('Year', 'Unknown')),
+                        "date": row.get('Date', 'Unknown'),
+                        "investors": row.get('Investors', 'Not disclosed')
+                    })
+            
+            # Sort rounds by amount (highest first)
+            all_rounds.sort(key=lambda x: parse_amount_to_numeric(x['amount']), reverse=True)
+            
+            # Format total funding
+            if total_funding >= 10_000_000:
+                total_funding_str = f"₹{total_funding/10_000_000:.2f} Cr"
+            elif total_funding >= 100_000:
+                total_funding_str = f"₹{total_funding/100_000:.2f} L"
+            else:
+                total_funding_str = f"₹{total_funding:,.0f}"
+            
+            # Get company description
+            description = get_company_description(detected_company, lang)
+            
+            # Build language-specific response
+            company_labels = {
+                'en': {'about': 'About', 'total_funding': 'Total Funding', 'rounds': 'Funding Rounds', 
+                       'sector': 'Sector', 'city': 'City', 'investors': 'Investors', 'year': 'Year'},
+                'hi': {'about': 'के बारे में', 'total_funding': 'कुल फंडिंग', 'rounds': 'फंडिंग राउंड',
+                       'sector': 'सेक्टर', 'city': 'शहर', 'investors': 'निवेशक', 'year': 'साल'},
+                'te': {'about': 'గురించి', 'total_funding': 'మొత్తం ఫండింగ్', 'rounds': 'ఫండింగ్ రౌండ్లు',
+                       'sector': 'రంగం', 'city': 'నగరం', 'investors': 'పెట్టుబడిదారులు', 'year': 'సంవత్సరం'},
+                'ta': {'about': 'பற்றி', 'total_funding': 'மொத்த நிதி', 'rounds': 'நிதி சுற்றுகள்',
+                       'sector': 'துறை', 'city': 'நகரம்', 'investors': 'முதலீட்டாளர்கள்', 'year': 'ஆண்டு'},
+                'kn': {'about': 'ಬಗ್ಗೆ', 'total_funding': 'ಒಟ್ಟು ಫಂಡಿಂಗ್', 'rounds': 'ಫಂಡಿಂಗ್ ಸುತ್ತುಗಳು',
+                       'sector': 'ವಲಯ', 'city': 'ನಗರ', 'investors': 'ಹೂಡಿಕೆದಾರರು', 'year': 'ವರ್ಷ'},
+                'mr': {'about': 'बद्दल', 'total_funding': 'एकूण फंडिंग', 'rounds': 'फंडिंग राउंड',
+                       'sector': 'क्षेत्र', 'city': 'शहर', 'investors': 'गुंतवणूकदार', 'year': 'वर्ष'},
+                'gu': {'about': 'વિશે', 'total_funding': 'કુલ ફંડિંગ', 'rounds': 'ફંડિંગ રાઉન્ડ',
+                       'sector': 'ક્ષેત્ર', 'city': 'શહેર', 'investors': 'રોકાણકારો', 'year': 'વર્ષ'},
+                'bn': {'about': 'সম্পর্কে', 'total_funding': 'মোট ফান্ডিং', 'rounds': 'ফান্ডিং রাউন্ড',
+                       'sector': 'সেক্টর', 'city': 'শহর', 'investors': 'বিনিয়োগকারী', 'year': 'বছর'},
+            }
+            lbl = company_labels.get(lang, company_labels['en'])
+            
+            # Transliterate company name for non-English
+            display_name = detected_company
+            if lang != 'en':
+                display_name = transliterate_company_name(detected_company, lang)
+            
+            # Build response
+            answer = f"**{display_name}** {lbl['about']}\n\n"
+            if description:
+                answer += f"{description}\n\n"
+            answer += f"**{lbl['total_funding']}:** {total_funding_str}\n"
+            answer += f"**{lbl['rounds']}:** {len(all_rounds)}\n\n"
+            
+            # Show top funding rounds (max 5)
+            for i, round_info in enumerate(all_rounds[:5], 1):
+                answer += f"{i}. **{format_amount(round_info['amount'])}**"
+                if round_info.get('year') and round_info['year'] != 'Unknown':
+                    answer += f" ({round_info['year']})"
+                if round_info.get('sector') and round_info['sector'] != 'Unknown':
+                    answer += f" • {lbl['sector']}: {round_info['sector']}"
+                if round_info.get('city') and round_info['city'] != 'Unknown':
+                    city_display = round_info['city']
+                    if lang != 'en':
+                        city_display = transliterate_company_name(round_info['city'], lang)
+                    answer += f" • {lbl['city']}: {city_display}"
+                if round_info.get('investors') and round_info['investors'] not in ['Not disclosed', 'Unknown', '']:
+                    answer += f"\n   {lbl['investors']}: {round_info['investors']}"
+                answer += "\n"
+            
+            sources = [{"company": detected_company, "amount": r['amount'], "year": r['year'], 
+                       "sector": r.get('sector', ''), "city": r.get('city', '')} for r in all_rounds[:5]]
+            
+            return {"answer": answer.strip(), "sources": sources}
+    
     # Updated patterns to support Unicode (Indic scripts) using \w instead of [a-z]
     what_do_patterns = [
         r'(?:what|tell me) (?:does|do|is|about) ([\w\s]+?)(?:\s+do|\s+company)?(?:\?|\.|\s*$)',
@@ -885,11 +1089,11 @@ def prometheus_pipeline(query: str, lang: str = "en") -> dict:
         r'about ([\w\s]+)',
         r'what is ([\w\s]+)',
         r'([\w\s]+?) (?:क्या|काय|શું|என்ன|ఏమి|ಏನು|কী) (?:करती|करते|કરે|செய்கிற|చేస్తుంది|ಮಾಡುತ್ತದೆ|করে)',
-        r'([\w\s]+?) (?:के बारे में|बद्दल|વિશે|பற்றி|గురించి|ಬಗ್ಗೆ|সম্পর্কে|बताओ|सांगा|કહો|சொல்லுங்கள்|చెప్పండి|ಹೇಳಿ|বলুন)'
+        r'([\w\s]+?) (?:के बारे में|बद्दल|વિશે|பற்றி|గురించి|ಬಗ್ಗೆ|সম্পর্কে|बताओ|सांगा|કहो|சொல்லுங்கள்|చెప్పండి|ಹೇಳಿ|বলুন)'
     ]
     
     for pattern in what_do_patterns:
-        match = re.search(pattern, query_lower, re.IGNORECASE | re.UNICODE)
+        match = re.search(pattern, query_original, re.IGNORECASE | re.UNICODE)  # Use original query for Indic scripts
         if match:
             company_name = match.group(1).strip()
             
@@ -897,8 +1101,36 @@ def prometheus_pipeline(query: str, lang: str = "en") -> dict:
             company_name = re.sub(r'\s+', ' ', company_name)  # Normalize whitespace
             company_name = company_name.replace(' company', '').replace(' startup', '').replace('.', '').replace('?', '').strip()
             
+            # Define sector-related terms that should NOT be treated as company names
+            sector_terms = ['healthcare', 'healthtech', 'fintech', 'edtech', 'foodtech', 'agritech', 
+                           'ecommerce', 'e-commerce', 'logistics', 'mobility', 'deeptech', 'saas',
+                           'gaming', 'social media', 'finance', 'health', 'education', 'food',
+                           'sector', 'industry', 'funding', 'investment', 'comparison', 'compare',
+                           # Aggregation terms - should NOT be treated as companies
+                           'total', 'sum', 'average', 'count', 'number', 'how many', 'how much',
+                           'funding in', 'companies in', 'startups in', 'investment in',
+                           'the total', 'total funding', 'total investment', 'total amount',
+                           # City-related phrases
+                           'bangalore', 'mumbai', 'delhi', 'hyderabad', 'chennai', 'pune', 
+                           'kolkata', 'gurgaon', 'noida', 'india',
+                           # Generic terms
+                           'top', 'best', 'highest', 'lowest', 'recent', 'latest', 'list',
+                           'show', 'display', 'give', 'tell']
+            
             # Skip if company name is too generic or empty
             if len(company_name) < 2 or company_name in ['it', 'this', 'that', 'they', 'them', 'the']:
+                continue
+            
+            # Skip if this contains a non-company term (aggregation, city, sector, etc.)
+            company_name_lower = company_name.lower()
+            is_non_company = False
+            for term in sector_terms:
+                if term in company_name_lower:
+                    logger.info(f"Skipping '{company_name}' - contains non-company term '{term}'")
+                    is_non_company = True
+                    break
+            
+            if is_non_company:
                 continue
             
             # Reverse transliterate Indic script names to English
@@ -918,30 +1150,43 @@ def prometheus_pipeline(query: str, lang: str = "en") -> dict:
             if not company_exists.empty:
                 # Company in dataset - show funding details
                 all_rounds = []
-                total_funding = 0
+                total_funding = 0.0
                 
                 for idx, row in company_exists.iterrows():
-                    amount = row['Amount_Cleaned']
-                    if pd.notna(amount) and amount > 0:
-                        total_funding += amount
+                    amount_str = row['Amount_Cleaned']
+                    # Parse the string amount to numeric value
+                    amount_numeric = parse_amount_to_numeric(amount_str)
+                    if amount_numeric > 0:
+                        total_funding += amount_numeric
                         all_rounds.append({
-                            "amount": format_amount(amount),
+                            "amount": amount_str if amount_str else "Unknown",  # Preserve original string format
                             "sector": row.get('Sector', 'Unknown'),
-                            "city": row.get('City_Standardized', 'Unknown'),
+                            "city": row.get('City', 'Unknown'),
                             "state": row.get('State_Standardized', 'Unknown'),
                             "year": str(row.get('Year', 'Unknown')),
                             "date": row.get('Date', 'Unknown'),
                             "investors": row.get('Investors', 'Not disclosed')
                         })
                 
+                # Sort rounds by amount (highest first)
+                all_rounds.sort(key=lambda x: parse_amount_to_numeric(x['amount']), reverse=True)
+                
+                # Format total funding for display (convert from rupees to Crores)
+                if total_funding >= 10_000_000:
+                    total_funding_str = f"₹{total_funding/10_000_000:.2f} Cr"
+                elif total_funding >= 100_000:
+                    total_funding_str = f"₹{total_funding/100_000:.2f} L"
+                else:
+                    total_funding_str = f"₹{total_funding:,.0f}"
+                
                 # Build comprehensive response
                 if lang == "en":
                     answer = f"{company_name}\n\n{description}\n\n"
                     answer += f"Funding Summary:\n"
-                    answer += f"- Total Funding: {format_amount(total_funding)}\n"
+                    answer += f"- Total Funding: {total_funding_str}\n"
                     answer += f"- Number of Rounds: {len(all_rounds)}\n"
                     answer += f"- Primary Sector: {company_exists.iloc[0].get('Sector', 'Unknown')}\n"
-                    answer += f"- Location: {company_exists.iloc[0].get('City_Standardized', 'Unknown')}, {company_exists.iloc[0].get('State_Standardized', 'Unknown')}\n\n"
+                    answer += f"- Location: {company_exists.iloc[0].get('City', 'Unknown')}, {company_exists.iloc[0].get('State_Standardized', 'Unknown')}\n\n"
                     
                     if len(all_rounds) > 0:
                         answer += "Funding Rounds:\n"
@@ -956,10 +1201,10 @@ def prometheus_pipeline(query: str, lang: str = "en") -> dict:
                     # Hindi response
                     answer = f"{company_name}\n\n{description}\n\n"
                     answer += f"फंडिंग सारांश:\n"
-                    answer += f"- कुल फंडिंग: {format_amount(total_funding)}\n"
+                    answer += f"- कुल फंडिंग: {total_funding_str}\n"
                     answer += f"- राउंड्स: {len(all_rounds)}\n"
                     answer += f"- सेक्टर: {company_exists.iloc[0].get('Sector', 'अज्ञात')}\n"
-                    answer += f"- स्थान: {company_exists.iloc[0].get('City_Standardized', 'अज्ञात')}, {company_exists.iloc[0].get('State_Standardized', 'अज्ञात')}\n"
+                    answer += f"- स्थान: {company_exists.iloc[0].get('City', 'अज्ञात')}, {company_exists.iloc[0].get('State_Standardized', 'अज्ञात')}\n"
                 
                 # Return with sources showing all rounds
                 sources = []
@@ -1050,19 +1295,306 @@ def prometheus_pipeline(query: str, lang: str = "en") -> dict:
     # Encode query directly (paraphrase-multilingual-mpnet-base-v2 handles multilingual)
     query_embedding = model.encode([query])[0]
     
+    # Define available sectors in the dataset
+    AVAILABLE_SECTORS = ['Foodtech', 'SaaS', 'Gaming', 'Agritech', 'E-Commerce', 'Social Media',
+                         'Fintech', 'Edtech', 'Healthtech', 'Logistics', 'Mobility', 'Deeptech']
+    SECTOR_ALIASES = {
+        # English aliases
+        'ecommerce': 'E-Commerce', 'e commerce': 'E-Commerce', 'online retail': 'E-Commerce',
+        'food tech': 'Foodtech', 'food': 'Foodtech', 'restaurant': 'Foodtech',
+        'health tech': 'Healthtech', 'health': 'Healthtech', 'medical': 'Healthtech', 'healthcare': 'Healthtech',
+        'hospital': 'Healthtech', 'medicine': 'Healthtech', 'pharma': 'Healthtech', 'biotech': 'Healthtech',
+        'fin tech': 'Fintech', 'finance': 'Fintech', 'banking': 'Fintech', 'payment': 'Fintech', 'payments': 'Fintech',
+        'ed tech': 'Edtech', 'education': 'Edtech', 'learning': 'Edtech', 'school': 'Edtech', 'training': 'Edtech',
+        'agri tech': 'Agritech', 'agriculture': 'Agritech', 'farming': 'Agritech', 'farm': 'Agritech',
+        'deep tech': 'Deeptech', 'ai': 'Deeptech', 'ml': 'Deeptech', 'artificial intelligence': 'Deeptech',
+        'social': 'Social Media', 'media': 'Social Media',
+        'game': 'Gaming', 'games': 'Gaming',
+        'saas': 'SaaS', 'software': 'SaaS', 'b2b': 'SaaS',
+        'logistics': 'Logistics', 'delivery': 'Logistics', 'supply chain': 'Logistics', 'shipping': 'Logistics',
+        'mobility': 'Mobility', 'transport': 'Mobility', 'transportation': 'Mobility', 'cab': 'Mobility', 'taxi': 'Mobility',
+        # Hindi aliases (Devanagari)
+        'फिनटेक': 'Fintech', 'वित्त': 'Fintech', 'वित्तीय': 'Fintech', 'बैंकिंग': 'Fintech', 'भुगतान': 'Fintech',
+        'स्वास्थ्य': 'Healthtech', 'स्वास्थ्य सेवा': 'Healthtech', 'चिकित्सा': 'Healthtech', 'हेल्थ': 'Healthtech', 'हेल्थटेक': 'Healthtech', 'अस्पताल': 'Healthtech',
+        'शिक्षा': 'Edtech', 'एडटेक': 'Edtech', 'पढ़ाई': 'Edtech', 'स्कूल': 'Edtech', 'शैक्षिक': 'Edtech',
+        'ई-कॉमर्स': 'E-Commerce', 'ऑनलाइन शॉपिंग': 'E-Commerce', 'खरीदारी': 'E-Commerce',
+        'फूडटेक': 'Foodtech', 'खाद्य': 'Foodtech', 'भोजन': 'Foodtech', 'रेस्टोरेंट': 'Foodtech',
+        'कृषि': 'Agritech', 'खेती': 'Agritech', 'किसान': 'Agritech',
+        'लॉजिस्टिक्स': 'Logistics', 'डिलीवरी': 'Logistics',
+        'गेमिंग': 'Gaming', 'खेल': 'Gaming',
+        # Tamil aliases
+        'ஃபின்டெக்': 'Fintech', 'நிதி': 'Fintech', 'வங்கி': 'Fintech',
+        'சுகாதாரம்': 'Healthtech', 'மருத்துவம்': 'Healthtech', 'ஆரோக்கியம்': 'Healthtech', 'ஹெல்த்டெக்': 'Healthtech',
+        'கல்வி': 'Edtech', 'எட்டெக்': 'Edtech', 'படிப்பு': 'Edtech',
+        'இகாமர்ஸ்': 'E-Commerce', 'ஆன்லைன்': 'E-Commerce',
+        'உணவு': 'Foodtech', 'உணவகம்': 'Foodtech',
+        'விவசாயம்': 'Agritech', 'வேளாண்மை': 'Agritech',
+        # Telugu aliases
+        'ఫిన్‌టెక్': 'Fintech', 'ఆర్థిక': 'Fintech', 'బ్యాంకింగ్': 'Fintech',
+        'ఆరోగ్యం': 'Healthtech', 'ఆరోగ్య సంరక్షణ': 'Healthtech', 'వైద్యం': 'Healthtech', 'హెల్త్‌టెక్': 'Healthtech',
+        'విద్య': 'Edtech', 'ఎడ్‌టెక్': 'Edtech', 'చదువు': 'Edtech',
+        'ఇ-కామర్స్': 'E-Commerce',
+        'ఆహారం': 'Foodtech', 'భోజనం': 'Foodtech',
+        'వ్యవసాయం': 'Agritech',
+        # Kannada aliases
+        'ಫಿನ್‌ಟೆಕ್': 'Fintech', 'ಹಣಕಾಸು': 'Fintech', 'ಬ್ಯಾಂಕಿಂಗ್': 'Fintech',
+        'ಆರೋಗ್ಯ': 'Healthtech', 'ವೈದ್ಯಕೀಯ': 'Healthtech', 'ಹೆಲ್ತ್‌ಟೆಕ್': 'Healthtech',
+        'ಶಿಕ್ಷಣ': 'Edtech', 'ಎಡ್‌ಟೆಕ್': 'Edtech',
+        'ಇ-ಕಾಮರ್ಸ್': 'E-Commerce',
+        'ಆಹಾರ': 'Foodtech',
+        'ಕೃಷಿ': 'Agritech',
+        # Malayalam aliases
+        'ഫിൻടെക്': 'Fintech', 'ധനകാര്യം': 'Fintech', 'ബാങ്കിംഗ്': 'Fintech',
+        'ആരോഗ്യം': 'Healthtech', 'ചികിത്സ': 'Healthtech', 'ഹെൽത്ത്‌ടെക്': 'Healthtech',
+        'വിദ്യാഭ്യാസം': 'Edtech', 'എഡ്‌ടെക്': 'Edtech',
+        'ഇ-കൊമേഴ്‌സ്': 'E-Commerce',
+        'ഭക്ഷണം': 'Foodtech',
+        'കൃഷി': 'Agritech',
+        # Bengali aliases - with various spellings
+        'ফিনটেক': 'Fintech', 'ফিন্টেক': 'Fintech', 'অর্থ': 'Fintech', 'ব্যাংকিং': 'Fintech', 'আর্থিক': 'Fintech',
+        'ফিনটেক কোম্পানি': 'Fintech', 'ফিন্টেক কোম্পানি': 'Fintech',
+        'স্বাস্থ্য': 'Healthtech', 'চিকিৎসা': 'Healthtech', 'হেলথটেক': 'Healthtech',
+        'শিক্ষা': 'Edtech', 'এডটেক': 'Edtech',
+        'ই-কমার্স': 'E-Commerce',
+        'খাদ্য': 'Foodtech',
+        'কৃষি': 'Agritech',
+        # Marathi aliases
+        'फिनटेक': 'Fintech', 'वित्त': 'Fintech',
+        'आरोग्य': 'Healthtech', 'वैद्यकीय': 'Healthtech',
+        'शिक्षण': 'Edtech',
+        # Gujarati aliases
+        'ફિનટેક': 'Fintech', 'નાણાકીય': 'Fintech',
+        'આરોગ્ય': 'Healthtech', 'તબીબી': 'Healthtech',
+        'શિક્ષણ': 'Edtech',
+    }
+    
+    # Check if this is a comparison query (between multiple sectors)
+    is_comparison_query = any(word in query_lower for word in ['compare', 'comparison', 'vs', 'versus', 'between', 'and'])
+    
+    # Extract ALL sectors from query (for comparison queries)
+    detected_sectors = []
+    query_lower_for_sector = query_lower.replace('-', ' ')
+    
+    # First check for exact sector names (case-insensitive)
+    for sector in AVAILABLE_SECTORS:
+        if sector.lower() in query_lower_for_sector:
+            if sector not in detected_sectors:
+                detected_sectors.append(sector)
+    
+    # Then check aliases
+    for alias, sector in SECTOR_ALIASES.items():
+        if alias in query_lower_for_sector:
+            if sector not in detected_sectors:
+                detected_sectors.append(sector)
+    
+    # For single-sector queries, use first detected sector
+    detected_sector = detected_sectors[0] if detected_sectors else None
+    
+    # If comparison query with multiple sectors, handle specially
+    if is_comparison_query and len(detected_sectors) >= 2:
+        logger.info(f"Detected sector comparison query between: {detected_sectors}")
+        # Get data for each sector and generate comparison
+        sector_data = {}
+        for sector in detected_sectors:
+            sector_df = df[df['Sector_Standardized'] == sector]
+            sector_df_with_amount = sector_df.copy()
+            sector_df_with_amount['Amount_Numeric'] = sector_df['Amount_Cleaned'].apply(parse_amount_to_numeric)
+            total_funding = sector_df_with_amount['Amount_Numeric'].sum()
+            total_companies = len(sector_df)
+            avg_funding = total_funding / total_companies if total_companies > 0 else 0
+            sector_data[sector] = {
+                'total_funding': total_funding,
+                'total_companies': total_companies,
+                'avg_funding': avg_funding
+            }
+        
+        # Generate comparison response
+        answer = "📊 **Sector Funding Comparison**\n\n"
+        answer += "═══════════════════════════════════════\n\n"
+        
+        for sector, data in sector_data.items():
+            total_cr = data['total_funding'] / 10000000  # Convert to Crores
+            avg_cr = data['avg_funding'] / 10000000
+            answer += f"**{sector}**\n"
+            answer += f"  • Total Funding: ₹{total_cr:,.2f} Cr\n"
+            answer += f"  • Companies Funded: {data['total_companies']}\n"
+            answer += f"  • Avg per Company: ₹{avg_cr:,.2f} Cr\n\n"
+        
+        answer += "───────────────────────────────────────\n"
+        
+        # Find the sector with highest funding
+        max_sector = max(sector_data.items(), key=lambda x: x[1]['total_funding'])
+        answer += f"\n💡 **{max_sector[0]}** has the highest total funding in our dataset.\n"
+        
+        # Get sample companies from each sector
+        sources = []
+        for sector in detected_sectors[:2]:  # Top 2 sectors
+            sector_companies = df[df['Sector_Standardized'] == sector].head(5)
+            for _, row in sector_companies.iterrows():
+                sources.append({
+                    "company": row['Startup Name'],
+                    "amount": format_amount(row['Amount_Cleaned']),
+                    "sector": sector,
+                    "city": row.get('City', ''),
+                    "year": str(row.get('Year', ''))
+                })
+        
+        return {
+            "answer": answer,
+            "sources": sources[:10]
+        }
+    
+    # Check if user is asking about a sector that doesn't exist in our dataset
+    unavailable_sectors = ['fmcg', 'consumer goods', 'retail', 'manufacturing', 'real estate', 'realestate',
+                          'construction', 'pharma', 'pharmaceutical', 'textile', 'hospitality', 'travel', 'tourism']
+    for unavail_sector in unavailable_sectors:
+        if unavail_sector in query_lower_for_sector:
+            available_list = ', '.join(AVAILABLE_SECTORS)
+            error_msgs = {
+                "hi": f"क्षमा करें, '{unavail_sector.upper()}' सेक्टर हमारे डेटासेट में उपलब्ध नहीं है।\n\nउपलब्ध सेक्टर: {available_list}\n\nकृपया इनमें से किसी सेक्टर के बारे में पूछें।",
+                "te": f"క్షమించండి, '{unavail_sector.upper()}' సెక్టార్ మా డేటాసెట్‌లో అందుబాటులో లేదు।\n\nఅందుబాటులో ఉన్న సెక్టార్లు: {available_list}\n\nదయచేసి వీటిలో ఒక సెక్టార్ గురించి అడగండి।",
+                "en": f"Sorry, '{unavail_sector.upper()}' sector is not available in our dataset.\n\nAvailable sectors: {available_list}\n\nPlease ask about one of these sectors."
+            }
+            return {
+                "answer": error_msgs.get(lang, error_msgs["en"]),
+                "sources": []
+            }
+    
+    # Detect if user wants lowest/least funding (for sorting)
+    wants_lowest = any(word in query_lower for word in ['lowest', 'least', 'smallest', 'minimum', 'min', 
+                                                         'सबसे कम', 'न्यूनतम', 'కనిష్ట', 'కనీస'])
+    wants_highest = any(word in query_lower for word in ['highest', 'most', 'largest', 'maximum', 'max', 'top',
+                                                          'सबसे ज्यादा', 'अधिकतम', 'గరిష్ట', 'అత్యధిక'])
+    wants_latest = any(word in query_lower for word in ['latest', 'recent', 'newest', 'new', 
+                                                         'नवीनतम', 'हाल', 'తాజా', 'ఇటీవల'])
+    
+    # Detect requested count from query (e.g., "top 10", "టాప్ 5", "शीर्ष 20")
+    # This handles multilingual patterns for requesting specific number of results
+    DEFAULT_RESULT_COUNT = 15
+    requested_count = DEFAULT_RESULT_COUNT
+    
+    # Patterns to detect count in various languages
+    count_patterns = [
+        # English: "top 10", "best 5", "list 20", "show 10", "first 10"
+        r'(?:top|best|list|show|first|give|display)\s*(\d+)',
+        r'(\d+)\s*(?:top|best|companies|startups|कंपनियां|కంపెనీలు|நிறுவனங்கள்)',
+        # Hindi: "टॉप 10", "शीर्ष 5", "पहले 10"
+        r'(?:टॉप|टाप|शीर्ष|पहले|प्रथम)\s*(\d+)',
+        r'(\d+)\s*(?:टॉप|शीर्ष|कंपनियां|स्टार्टअप)',
+        # Telugu: "టాప్ 10", "మొదటి 10"
+        r'(?:టాప్|మొదటి|ప్రథమ)\s*(\d+)',
+        r'(\d+)\s*(?:టాప్|కంపెనీలు|స్టార్టప్‌లు)',
+        # Tamil: "முதல் 10", "சிறந்த 10"
+        r'(?:முதல்|சிறந்த|டாப்)\s*(\d+)',
+        r'(\d+)\s*(?:நிறுவனங்கள்|முதல்)',
+        # Kannada: "ಟಾಪ್ 10", "ಮೊದಲ 10"
+        r'(?:ಟಾಪ್|ಮೊದಲ|ಅಗ್ರ)\s*(\d+)',
+        # Bengali: "শীর্ষ 10", "প্রথম 10"
+        r'(?:শীর্ষ|প্রথম|টপ)\s*(\d+)',
+        # Marathi: "टॉप 10", "पहिले 10"
+        r'(?:टॉप|पहिले|अव्वल)\s*(\d+)',
+        # Gujarati: "ટોચ 10", "પ્રથમ 10"
+        r'(?:ટોચ|ટોપ|પ્રથમ)\s*(\d+)',
+    ]
+    
+    for pattern in count_patterns:
+        match = re.search(pattern, query, re.IGNORECASE | re.UNICODE)
+        if match:
+            extracted_count = int(match.group(1))
+            # Limit to reasonable range (1-100)
+            if 1 <= extracted_count <= 100:
+                requested_count = extracted_count
+                logger.info(f"Detected requested count: {requested_count} from query")
+                break
+    
+    # Extract city from query
+    CITY_MAPPING = {
+        # Bangalore variations (English, Hindi, Telugu, Kannada, Tamil)
+        'bangalore': 'Bangalore', 'bengaluru': 'Bangalore', 'blr': 'Bangalore',
+        'बैंगलोर': 'Bangalore', 'बेंगलुरु': 'Bangalore', 'బెంగళూరు': 'Bangalore',
+        'ಬೆಂಗಳೂರು': 'Bangalore', 'பெங்களூர்': 'Bangalore', 'ബെംഗളൂരു': 'Bangalore',
+        'বেঙ্গালুরু': 'Bangalore',
+        # Mumbai variations
+        'mumbai': 'Mumbai', 'bombay': 'Mumbai',
+        'मुंबई': 'Mumbai', 'ముంబై': 'Mumbai', 'ಮುಂಬೈ': 'Mumbai',
+        'மும்பை': 'Mumbai', 'മുംബൈ': 'Mumbai', 'মুম্বাই': 'Mumbai',
+        # Delhi variations
+        'delhi': 'Delhi', 'new delhi': 'Delhi', 'ncr': 'Delhi',
+        'दिल्ली': 'Delhi', 'नई दिल्ली': 'Delhi', 'ఢిల్లీ': 'Delhi',
+        'ದೆಹಲಿ': 'Delhi', 'டெல்லி': 'Delhi', 'ഡൽഹി': 'Delhi', 'দিল্লি': 'Delhi',
+        # Hyderabad variations
+        'hyderabad': 'Hyderabad', 'hyd': 'Hyderabad',
+        'हैदराबाद': 'Hyderabad', 'హైదరాబాద్': 'Hyderabad', 'ಹೈದರಾಬಾದ್': 'Hyderabad',
+        'ஹைதராபாத்': 'Hyderabad', 'ഹൈദരാബാദ്': 'Hyderabad', 'হায়দরাবাদ': 'Hyderabad',
+        # Chennai variations
+        'chennai': 'Chennai', 'madras': 'Chennai',
+        'चेन्नई': 'Chennai', 'చెన్నై': 'Chennai', 'ಚೆನ್ನೈ': 'Chennai',
+        'சென்னை': 'Chennai', 'ചെന്നൈ': 'Chennai', 'চেন্নাই': 'Chennai',
+        # Pune variations
+        'pune': 'Pune', 'poona': 'Pune',
+        'पुणे': 'Pune', 'పూణే': 'Pune', 'ಪುಣೆ': 'Pune',
+        'புனே': 'Pune', 'പൂനെ': 'Pune', 'পুনে': 'Pune',
+        # Gurgaon/Gurugram variations
+        'gurgaon': 'Gurgaon', 'gurugram': 'Gurgaon', 'ggn': 'Gurgaon',
+        'गुड़गांव': 'Gurgaon', 'गुरुग्राम': 'Gurgaon', 'గురుగ్రామ్': 'Gurgaon',
+        # Kolkata variations
+        'kolkata': 'Kolkata', 'calcutta': 'Kolkata',
+        'कोलकाता': 'Kolkata', 'కోల్‌కతా': 'Kolkata', 'ಕೋಲ್ಕತಾ': 'Kolkata',
+        'கொல்கத்தா': 'Kolkata', 'കൊൽക്കത്ത': 'Kolkata', 'কলকাতা': 'Kolkata',
+        # Ahmedabad variations
+        'ahmedabad': 'Ahmedabad', 'amdavad': 'Ahmedabad',
+        'अहमदाबाद': 'Ahmedabad', 'అహ్మదాబాద్': 'Ahmedabad',
+        # Other cities
+        'indore': 'Indore', 'इंदौर': 'Indore',
+        'jaipur': 'Jaipur', 'जयपुर': 'Jaipur',
+        'lucknow': 'Lucknow', 'लखनऊ': 'Lucknow',
+        'chandigarh': 'Chandigarh', 'चंडीगढ़': 'Chandigarh',
+        'coimbatore': 'Coimbatore', 'कोयंबटूर': 'Coimbatore', 'కోయంబత్తూరు': 'Coimbatore', 'கோயம்புத்தூர்': 'Coimbatore',
+        'surat': 'Surat', 'सूरत': 'Surat',
+        'bhubaneswar': 'Bhubaneswar', 'भुवनेश्वर': 'Bhubaneswar',
+        'noida': 'Noida', 'नोएडा': 'Noida',
+        'kochi': 'Kochi', 'cochin': 'Kochi', 'कोच्चि': 'Kochi', 'കൊച്ചി': 'Kochi',
+        'thiruvananthapuram': 'Thiruvananthapuram', 'trivandrum': 'Thiruvananthapuram',
+        'visakhapatnam': 'Visakhapatnam', 'vizag': 'Visakhapatnam', 'విశాఖపట్నం': 'Visakhapatnam',
+        'nagpur': 'Nagpur', 'नागपुर': 'Nagpur',
+        'patna': 'Patna', 'पटना': 'Patna',
+    }
+    
+    detected_city = None
+    for city_alias, city_name in CITY_MAPPING.items():
+        if city_alias in query_lower:
+            detected_city = city_name
+            break
+    
     # Extract year from query if present to filter ChromaDB results
     year_match = re.search(r'\b(20[1-2][0-9])\b', query)  # Matches 2010-2029
     where_filter = None
+    where_conditions = []
+    
     if year_match:
         year_str = year_match.group(1)
-        where_filter = {"year": year_str}
+        where_conditions.append({"year": year_str})
     
-    # Query ChromaDB for top results with optional year filter
-    # Increase n_results when filtering by year to get more matches
+    if detected_sector:
+        where_conditions.append({"sector": detected_sector})
+        logger.info(f"Detected sector filter: {detected_sector}")
+    
+    if detected_city:
+        where_conditions.append({"city": detected_city})
+        logger.info(f"Detected city filter: {detected_city}")
+    
+    # Build where filter
+    if len(where_conditions) == 1:
+        where_filter = where_conditions[0]
+    elif len(where_conditions) > 1:
+        where_filter = {"$and": where_conditions}
+    
+    # Query ChromaDB for top results with optional filters
+    # Increase n_results when filtering to get more matches
     if where_filter:
         results = collection.query(
             query_embeddings=[query_embedding.tolist()],
-            n_results=100,  # Get many more results when filtering by year
+            n_results=200,  # Get many more results when filtering
             where=where_filter
         )
     else:
@@ -1080,9 +1612,14 @@ def prometheus_pipeline(query: str, lang: str = "en") -> dict:
         
         # Only include results above threshold
         if similarity_score > SIMILARITY_THRESHOLD:
+            # Parse amount for sorting
+            amount_str = metadata.get('amount', '0')
+            amount_numeric = parse_amount_to_numeric(amount_str)
+            
             retrieved_docs.append({
                 "company": metadata['company'],
                 "amount": format_amount(metadata['amount']),
+                "amount_numeric": amount_numeric,
                 "sector": metadata.get('sector', ''),
                 "city": metadata.get('city', ''),
                 "state": metadata.get('state', ''),
@@ -1093,20 +1630,38 @@ def prometheus_pipeline(query: str, lang: str = "en") -> dict:
                 "score": similarity_score
             })
     
-    # Sort by similarity score (highest first)
-    retrieved_docs = sorted(retrieved_docs, key=lambda x: x['score'], reverse=True)
+    # Sort based on query intent
+    if wants_lowest:
+        # Sort by amount (lowest first), filter out zero amounts
+        retrieved_docs = [d for d in retrieved_docs if d['amount_numeric'] > 0]
+        retrieved_docs = sorted(retrieved_docs, key=lambda x: x['amount_numeric'], reverse=False)
+        logger.info(f"Sorting by lowest funding first")
+    elif wants_highest:
+        # Sort by amount (highest first)
+        retrieved_docs = sorted(retrieved_docs, key=lambda x: x['amount_numeric'], reverse=True)
+        logger.info(f"Sorting by highest funding first")
+    elif wants_latest:
+        # Sort by year (latest first), then by date
+        retrieved_docs = sorted(retrieved_docs, key=lambda x: (x.get('year', '0'), x.get('date', '')), reverse=True)
+        logger.info(f"Sorting by latest date first")
+    else:
+        # Default: Sort by similarity score (highest first)
+        retrieved_docs = sorted(retrieved_docs, key=lambda x: x['score'], reverse=True)
+    
     logger.info(f"Retrieved {len(retrieved_docs)} relevant documents (threshold: {SIMILARITY_THRESHOLD})")
     
     # Calculate ACCURATE total from DataFrame (not just retrieved docs)
     # Extract year and city filters from query
-    year_match = re.search(r'\b(2015|2016|2017)\b', query)
+    year_match = re.search(r'\b(20[1-2][0-9])\b', query)  # Match any year 2010-2029
     city_keywords = {
-        'bangalore': 'bangalore', 'bengaluru': 'bangalore', 'बैंगलोर': 'bangalore',
-        'mumbai': 'mumbai', 'मुंबई': 'mumbai',
-        'delhi': 'new delhi', 'दिल्ली': 'new delhi',
-        'hyderabad': 'hyderabad', 'हैदराबाद': 'hyderabad',
-        'pune': 'pune', 'पुणे': 'pune',
-        'gurgaon': 'gurgaon', 'गुड़गांव': 'gurgaon'
+        'bangalore': 'Bangalore', 'bengaluru': 'Bangalore', 'बैंगलोर': 'Bangalore', 'banglore': 'Bangalore',
+        'mumbai': 'Mumbai', 'मुंबई': 'Mumbai',
+        'delhi': 'Delhi', 'दिल्ली': 'Delhi', 'new delhi': 'Delhi',
+        'hyderabad': 'Hyderabad', 'हैदराबाद': 'Hyderabad',
+        'pune': 'Pune', 'पुणे': 'Pune',
+        'gurgaon': 'Gurgaon', 'gurugram': 'Gurgaon', 'गुड़गांव': 'Gurgaon',
+        'chennai': 'Chennai', 'चेन्नई': 'Chennai',
+        'kolkata': 'Kolkata', 'कोलकाता': 'Kolkata'
     }
     
     # Filter DataFrame for accurate total
@@ -1114,16 +1669,22 @@ def prometheus_pipeline(query: str, lang: str = "en") -> dict:
     if year_match:
         year_filter = int(year_match.group(1))
         filtered_df = filtered_df[filtered_df['Year'] == year_filter]
+        logger.info(f"Filtered by year: {year_filter}")
     
     query_lower = query.lower()
     for keyword, city_value in city_keywords.items():
         if keyword in query_lower:
-            filtered_df = filtered_df[filtered_df['State_Standardized'].str.contains(city_value, case=False, na=False)]
+            # Try filtering by City column first, then State
+            city_filter = filtered_df['City'].str.contains(city_value, case=False, na=False)
+            state_filter = filtered_df['State_Standardized'].str.contains(city_value, case=False, na=False)
+            filtered_df = filtered_df[city_filter | state_filter]
+            logger.info(f"Filtered by city/state: {city_value}, found {len(filtered_df)} records")
             break
     
     # Calculate total from ALL matching companies in DataFrame
     total_amount = filtered_df['Amount_Cleaned'].apply(parse_amount_to_numeric).sum()
     total_companies = len(filtered_df)
+    logger.info(f"Total calculated: {total_amount} from {total_companies} companies")
     
     if total_amount >= 1_000_000:
         total_str = f"${total_amount/1_000_000:.1f}M"
@@ -1181,16 +1742,25 @@ def prometheus_pipeline(query: str, lang: str = "en") -> dict:
         # Create context with rich data from database
         context_parts = []
         
-        # Add total if calculated
-        if total_amount and total_companies:
-            context_parts.append(f"DATASET OVERVIEW:")
-            context_parts.append(f"- Total Funding: ${total_amount/1_000_000:.1f}M")
-            context_parts.append(f"- Number of Companies: {total_companies}")
-            context_parts.append(f"- Time Period: 2015-2017\\n")
+        # Add total summary - this is critical for "total funding" questions
+        if total_amount > 0 and total_companies > 0:
+            # Format total in Indian notation
+            if total_amount >= 10_000_000:  # 1 Cr+
+                total_formatted = f"₹{total_amount/10_000_000:.2f} Crores"
+            elif total_amount >= 100_000:  # 1 Lakh+
+                total_formatted = f"₹{total_amount/100_000:.2f} Lakhs"
+            else:
+                total_formatted = f"₹{total_amount:,.0f}"
+            
+            context_parts.append(f"=== SUMMARY STATISTICS ===")
+            context_parts.append(f"TOTAL FUNDING: {total_formatted} (${total_amount/1_000_000:.2f}M USD)")
+            context_parts.append(f"TOTAL COMPANIES: {total_companies}")
+            context_parts.append(f"AVERAGE PER COMPANY: ₹{(total_amount/total_companies)/10_000_000:.2f} Cr")
+            context_parts.append(f"===========================\n")
         
-        # Add top 15 companies with comprehensive details
-        context_parts.append("DETAILED FUNDING ROUNDS:")
-        for i, doc in enumerate(retrieved_docs[:15], 1):  # Increased from 10 to 15 for better context
+        # Add top companies with comprehensive details (use requested count)
+        context_parts.append(f"DETAILED FUNDING ROUNDS (showing top {min(requested_count, len(retrieved_docs))} of {total_companies}):")
+        for i, doc in enumerate(retrieved_docs[:requested_count], 1):  # Use requested_count from query
             # Transliterate company name for non-English languages
             company_name = doc['company']
             if lang != 'en':
@@ -1229,388 +1799,135 @@ def prometheus_pipeline(query: str, lang: str = "en") -> dict:
         
         context = "\\n".join(context_parts)
         
-        # Simple prompts that ask Llama to translate and explain
-        prompts = {
-            "hi": f"""नीचे दिए गए डेटा के आधार पर प्रश्न का पूर्ण उत्तर हिंदी में दें।
-
-डेटा:
-{context}
-
-प्रश्न: {query}
-
-निर्देश:
-- सभी नाम देवनागरी में लिखें (Swiggy→स्विगी, Bangalore→बेंगलुरु, Mumbai→मुंबई)
-- पहले सारांश: "कुल X कंपनियां, $Y कुल फंडिंग"
-- फिर हर कंपनी का विवरण: नाम • राशि • तारीख • सेक्टर • शहर
-- "Unknown" या "अज्ञात" कभी मत लिखो
-- सभी डेटा से जानकारी शामिल करें
-- संख्याओं में सूची बनाएं (1. 2. 3.)
-
-उत्तर:""",
-            
-            "mr": f"""खालील डेटाच्या आधारे प्रश्नाचे संपूर्ण उत्तर मराठीत द्या.
-
-डेटा:
-{context}
-
-प्रश्न: {query}
-
-सूचना:
-- सर्व नावे मराठी लिपीत लिहा (Swiggy→स्विगी, Bangalore→बेंगलुरु, Mumbai→मुंबई)
-- पहिले सारांश: "एकूण X कंपन्या, $Y एकूण फंडिंग"
-- मग प्रत्येक कंपनीचा तपशील: नाव • रक्कम • तारीख • सेक्टर • शहर
-- "Unknown" किंवा "माहिती नाही" कधीच लिहू नका
-- सर्व डेटामधून माहिती समाविष्ट करा
-- संख्यांमध्ये यादी करा (1. 2. 3.)
-
-उत्तर:""",
-            
-            "gu": f"""નીચેના ડેટાના આધારે પ્રશ્નનો સંપૂર્ણ જવાબ ગુજરાતીમાં આપો.
-
-ડેટા:
-{context}
-
-પ્રશ્ન: {query}
-
-સૂચના:
-- બધા નામો ગુજરાતી લિપિમાં લખો (Swiggy→સ્વિગી, Bangalore→બેંગલુરુ, Mumbai→મુંબઈ, Delhi→દિલ્હી, Haryana→હરિયાણા)
-- પહેલાં સારાંશ: "કુલ X કંપનીઓ, $Y કુલ ફંડિંગ"
-- પછી દરેક કંપનીની વિગતો: નામ • રકમ • તારીખ • સેક્ટર • શહેર
-- "Unknown" અથવા "અજ્ઞાત" ક્યારેય લખશો નહીં
-- બધા ડેટામાંથી માહિતી સામેલ કરો
-- સંખ્યાઓમાં યાદી કરો (1. 2. 3.)
-- મહત્વપૂર્ણ: "Company", "Amount", "Date", "City", "State" જેવા અંગ્રેજી શબ્દો ન વાપરો - બધું ગુજરાતીમાં લખો
-
-જવાબ:""",
-
-            "ta": f"""கீழே உள்ள தரவின் அடிப்படையில் கேள்விக்கு முழுமையான பதில் தமிழில் அளிக்கவும்.
-
-தரவு:
-{context}
-
-கேள்வி: {query}
-
-வழிமுறைகள்:
-- அனைத்து பெயர்களை தமிழ் எழுத்துக்களில் எழுதுங்கள் (Swiggy→ஸ்விகி, Bangalore→பெங்களூரு, Mumbai→மும்பை)
-- முதலில் சுருக்கம்: "மொத்தம் X நிறுவனங்கள், $Y மொத்த நிதி"
-- பின்னர் ஒவ்வொரு நிறுவன விவரங்கள்: பெயர் • தொகை • தேதி • துறை • நகரம்
-- "Unknown" அல்லது "தெரியாது" என்று ஒருபோதும் எழுதாதீர்கள்
-- அனைத்து தரவிலிருந்தும் தகவல்களை சேர்க்கவும்
-- எண்களில் பட்டியலிடுங்கள் (1. 2. 3.)
-
-பதில்:""",
-
-            "te": f"""క్రింది డేటా ఆధారంగా ప్రశ్నకు పూర్తి సమాధానం తెలుగులో ఇవ్వండి.
-
-డేటా:
-{context}
-
-ప్రశ్న: {query}
-
-సూచనలు:
-- అన్ని పేర్లను తెలుగు లిపిలో రాయండి (Swiggy→స్విగ్గీ, Bangalore→బెంగళూరు, Mumbai→ముంబై)
-- మొదట సారాంశం: "మొత్తం X కంపెనీలు, $Y మొత్తం ఫండింగ్"
-- తర్వాత ప్రతి కంపెనీ వివరాలు: పేరు • మొత్తం • తేదీ • రంగం • నగరం
-- "Unknown" లేదా "తెలియదు" అని ఎప్పుడూ రాయకండి
-- అన్ని డేటా నుండి సమాచారాన్ని చేర్చండి
-- సంఖ్యలతో జాబితా చేయండి (1. 2. 3.)
-
-సమాధానం:""",
-
-            "kn": f"""ಕೆಳಗಿನ ಡೇಟಾದ ಆಧಾರದ ಮೇಲೆ ಪ್ರಶ್ನೆಗೆ ಸಂಪೂರ್ಣ ಉತ್ತರವನ್ನು ಕನ್ನಡದಲ್ಲಿ ನೀಡಿ.
-
-ಡೇಟಾ:
-{context}
-
-ಪ್ರಶ್ನೆ: {query}
-
-ಸೂಚನೆಗಳು:
-- ಎಲ್ಲಾ ಹೆಸರುಗಳನ್ನು ಕನ್ನಡ ಲಿಪಿಯಲ್ಲಿ ಬರೆಯಿರಿ (Swiggy→ಸ್ವಿಗ್ಗಿ, Bangalore→ಬೆಂಗಳೂರು, Mumbai→ಮುಂಬೈ)
-- ಮೊದಲು ಸಾರಾಂಶ: "ಒಟ್ಟು X ಕಂಪನಿಗಳು, $Y ಒಟ್ಟು ಫಂಡಿಂಗ್"
-- ನಂತರ ಪ್ರತಿ ಕಂಪನಿ ವಿವರಗಳು: ಹೆಸರು • ಮೊತ್ತ • ದಿನಾಂಕ • ವಲಯ • ನಗರ
-- "Unknown" ಅಥವಾ "ತಿಳಿದಿಲ್ಲ" ಎಂದು ಎಂದಿಗೂ ಬರೆಯಬೇಡಿ
-- ಎಲ್ಲಾ ಡೇಟಾದಿಂದ ಮಾಹಿತಿಯನ್ನು ಸೇರಿಸಿ
-- ಸಂಖ್ಯೆಗಳಲ್ಲಿ ಪಟ್ಟಿ ಮಾಡಿ (1. 2. 3.)
-
-ಉತ್ತರ:""",
-
-            "bn": f"""নিচের ডেটার ভিত্তিতে প্রশ্নের সম্পূর্ণ উত্তর বাংলায় দিন.
-
-ডেটা:
-{context}
-
-প্রশ্ন: {query}
-
-নির্দেশাবলী:
-- সমস্ত নাম বাংলা লিপিতে লিখুন (Swiggy→স্উইগি, Bangalore→বেঙ্গালুরু, Mumbai→মুম্বাই)
-- প্রথমে সারসংক্ষেপ: "মোট X কোম্পানি, $Y মোট ফান্ডিং"
-- তারপর প্রতিটি কোম্পানির বিবরণ: নাম • পরিমাণ • তারিখ • সেক্টর • শহর
-- "Unknown" বা "অজানা" কখনো লিখবেন না
-- সমস্ত ডেটা থেকে তথ্য অন্তর্ভুক্ত করুন
-- সংখ্যায় তালিকা করুন (1. 2. 3.)
-
-উত্তর:""",
-            
-            "en": f"""Based on the data below, provide a comprehensive answer to the question.
+        # Universal prompt template - LLM handles language naturally
+        # The key instruction is to respond ENTIRELY in the target language
+        language_names = {
+            "hi": "Hindi (हिंदी)",
+            "te": "Telugu (తెలుగు)", 
+            "ta": "Tamil (தமிழ்)",
+            "kn": "Kannada (ಕನ್ನಡ)",
+            "bn": "Bengali (বাংলা)",
+            "mr": "Marathi (मराठी)",
+            "gu": "Gujarati (ગુજરાતી)",
+            "en": "English"
+        }
+        
+        target_language = language_names.get(lang, "English")
+        
+        # Single unified prompt that works for all languages
+        prompt = f"""You are a helpful assistant. Answer the following question based ONLY on the data provided.
 
 DATA:
 {context}
 
 QUESTION: {query}
 
-INSTRUCTIONS:
-- Start with summary: "Total X companies, $Y total funding"
-- Then list each company details: Name • Amount • Date • Sector • City
-- NEVER write "Unknown" - omit missing information
-- Include information from ALL data provided
-- Use numbered list (1. 2. 3.)
+CRITICAL INSTRUCTIONS:
+1. Respond ENTIRELY in {target_language} - ALL text, labels, and descriptions must be in {target_language}
+2. Translate company names, city names, and all labels to {target_language} script (e.g., Swiggy→स्विगी, Bangalore→बेंगलुरु for Hindi)
+3. Answer ONLY what is asked - no more, no less
+4. Use the SUMMARY STATISTICS if the question asks for totals
+5. NEVER write "Unknown" - skip missing information
+6. Do NOT add information not in the data
+7. Do NOT hallucinate or make up facts
+8. Format with numbered lists (1. 2. 3.) when listing multiple items
 
-ANSWER:
-
-EXAMPLE FORMAT:
-Swiggy received a total of $133.5M in funding across 5 rounds between 2015-2017 in Bangalore:
-
-**Funding Rounds:**
-1. $80.0M - May 30, 2017 - Food Delivery
-2. $16.5M - September 6, 2015 - Online Food Ordering
-3. $15.0M - June 5, 2015 - Online Food Delivery - Investors: [names if available]
-
-**Key Insights:**
-- Largest round was $80M showing strong growth trajectory
-- Primary focus on food delivery/ordering sector
-
-Provide a comprehensive, well-structured answer:"""
-        }
+ANSWER IN {target_language}:"""
         
-        # Use LLM for all languages
-        prompt = prompts.get(lang, prompts['en'])
+        # We use the single unified prompt above for all languages
+        # No more language-specific prompt dictionary needed
         
         logger.info(f"Calling Ollama LLM with {len(context)} chars of context")
         
-        # For non-English, use template-based approach for more reliable multilingual output
-        if lang != 'en':
-            logger.info(f"========== TEMPLATE PATH TRIGGERED: lang={lang} ==========")
+        # ALWAYS use LLM for intelligent responses (like ChatGPT)
+        # The LLM will understand query intent naturally:
+        # - "total funding in Bangalore" → aggregation answer
+        # - "top 10 fintech" → list of 10
+        # - "tell me about Swiggy" → company summary
+        try:
+            response = ollama.generate(
+                model=Config.OLLAMA_MODEL,
+                prompt=prompt,
+                options={
+                    "temperature": 0.3,  # Lower temperature for factual answers
+                    "top_p": 0.9,
+                    "num_predict": 2048  # Increased for longer responses without truncation
+                }
+            )
+            answer = response['response'].strip()
+            logger.info(f"LLM response generated: {len(answer)} chars")
             
-            # Detect query type
-            query_type = detect_query_type(query, lang)
-            logger.info(f"Query type detected: {query_type}")
+            # Clean up any "Unknown" mentions the LLM might have included
+            answer = answer.replace("Unknown", "").replace("unknown", "")
+            answer = re.sub(r'\n\s*\n\s*\n', '\n\n', answer)  # Remove extra blank lines
             
-            # Handle aggregation queries
-            if query_type == 'aggregation':
-                answer = handle_aggregation_query(query, lang, retrieved_docs)
-                logger.info(f"Aggregation query handled: {len(answer)} chars")
-            elif query_type == 'comparison':
-                comparison_answer = handle_comparison_query(query, lang, retrieved_docs)
-                if comparison_answer:
-                    answer = comparison_answer
-                    logger.info(f"Comparison query handled: {len(answer)} chars")
+            # Ensure response ends at a valid sentence boundary (not mid-sentence)
+            # Valid sentence endings: . ! ? । (Hindi danda) 
+            lines = answer.split('\n')
+            if lines:
+                last_line = lines[-1].strip()
+                # Check if the last line is incomplete (no proper ending)
+                valid_endings = ('.', '!', '?', '।', ':', ')', ']', '"', "'", '₹', 'crore', 'करोड़', 'லட்சம்', 'కోట్ల', 'ಕೋಟಿ')
+                if last_line and not any(last_line.endswith(end) for end in valid_endings):
+                    # Last line is incomplete - check if it looks like a truncated list item
+                    if len(lines) > 1:
+                        # Remove the incomplete last line
+                        lines = lines[:-1]
+                        answer = '\n'.join(lines)
+                        logger.info("Trimmed incomplete last line from response")
+            
+        except Exception as llm_error:
+            logger.error(f"LLM generation failed: {llm_error}")
+            # Smart fallback - calculate actual totals and provide useful response
+            if retrieved_docs:
+                # Calculate total funding from all retrieved documents
+                total_funding = sum(parse_amount_to_numeric(doc['amount']) for doc in retrieved_docs)
+                unique_companies = len(set(doc['company'] for doc in retrieved_docs))
+                
+                # Format total funding nicely
+                if total_funding >= 10_000_000:  # 1 Cr+
+                    total_str = f"₹{total_funding/10_000_000:.2f} Cr"
+                elif total_funding >= 100_000:  # 1 L+
+                    total_str = f"₹{total_funding/100_000:.2f} L"
                 else:
-                    # Fall back to normal template
-                    query_type = 'simple'
-            
-            # For simple queries or fallback, use standard template
-            if query_type == 'simple' or query_type == 'trend':
-                # Build response using template for better script consistency
-                answer_parts = []
+                    total_str = f"₹{total_funding:,.0f}"
                 
-                # Calculate total from retrieved docs
-                logger.info(f"Calculating total funding from {len(retrieved_docs)} documents")
-                total_funding = sum(parse_amount_to_numeric(doc['amount']) for doc in retrieved_docs)
-                logger.info(f"Total funding calculated: ₹{total_funding/100_000:.2f} L")
-            
-            # Language-specific labels
-            labels = {
-                'hi': {'summary': 'सारांश', 'companies': 'कंपनियां', 'funding': 'कुल फंडिंग', 'details': 'विवरण', 'amount': 'राशि', 'year': 'वर्ष', 'sector': 'क्षेत्र', 'city': 'शहर', 'total': 'कुल', 'crores': 'करोड़'},
-                'te': {'summary': 'సారాంశం', 'companies': 'కంపెనీలు', 'funding': 'మొత్తం ఫండింగ్', 'details': 'వివరాలు', 'amount': 'మొత్తం', 'year': 'సంవత్సరం', 'sector': 'రంగం', 'city': 'నగరం', 'total': 'మొత్తం', 'crores': 'కోట్లు'},
-                'ta': {'summary': 'சுருக்கம்', 'companies': 'நிறுவனங்கள்', 'funding': 'மொத்த நிதி', 'details': 'விவரங்கள்', 'amount': 'தொகை', 'year': 'ஆண்டு', 'sector': 'துறை', 'city': 'நகரம்', 'total': 'மொத்தம்', 'crores': 'கோடி'},
-                'kn': {'summary': 'ಸಾರಾಂಶ', 'companies': 'ಕಂಪನಿಗಳು', 'funding': 'ಒಟ್ಟು ಫಂಡಿಂಗ್', 'details': 'ವಿವರಗಳು', 'amount': 'ಮೊತ್ತ', 'year': 'ವರ್ಷ', 'sector': 'ವಲಯ', 'city': 'ನಗರ', 'total': 'ಒಟ್ಟು', 'crores': 'ಕೋಟಿ'},
-                'mr': {'summary': 'सारांश', 'companies': 'कंपन्या', 'funding': 'एकूण फंडिंग', 'details': 'तपशील', 'amount': 'रक्कम', 'year': 'वर्ष', 'sector': 'क्षेत्र', 'city': 'शहर', 'total': 'एकूण', 'crores': 'कोटी'},
-                'gu': {'summary': 'સારાંશ', 'companies': 'કંપનીઓ', 'funding': 'કુલ ફંડિંગ', 'details': 'વિગતો', 'amount': 'રકમ', 'year': 'વર્ષ', 'sector': 'સેક્ટર', 'city': 'શહેર', 'total': 'કુલ', 'crores': 'કરોડ'},
-                'bn': {'summary': 'সারাংশ', 'companies': 'কোম্পানি', 'funding': 'মোট ফান্ডিং', 'details': 'বিবরণ', 'amount': 'পরিমাণ', 'year': 'বছর', 'sector': 'সেক্টর', 'city': 'শহর', 'total': 'মোট', 'crores': 'কোটি'}
-            }
-            
-            lbl = labels.get(lang, labels['hi'])
-            
-            # Clean markdown format (same as English)
-            answer_parts.append(f"**{lbl['total']} {len(retrieved_docs)} {lbl['companies']}, ₹{format_indian_number(total_funding/10_000_000)} {lbl['crores']} {lbl['funding']}**\n\n")
-            answer_parts.append(f"**{lbl['companies']}:**\n\n")
-            
-            logger.info(f"Added formatted summary for {lang}")
-            
-            # List each company with structured format (clean bullets like English)
-            for i, doc in enumerate(retrieved_docs[:15], 1):
-                company_name = doc['company']
-                if lang != 'en':
-                    company_name = transliterate_company_name(doc['company'], lang)
+                # Get top 5 companies
+                top_companies = retrieved_docs[:5]
+                company_list = "\n".join([
+                    f"{i+1}. {doc['company']} - {doc['amount']}"
+                    for i, doc in enumerate(top_companies)
+                ])
                 
-                city_name = doc.get('city', '')
-                if city_name and city_name != 'Unknown' and lang != 'en':
-                    city_name = transliterate_company_name(city_name, lang)
-                
-                sector_name = doc.get('sector', '')
-                if sector_name and sector_name != 'Unknown' and lang != 'en':
-                    sector_name = transliterate_company_name(sector_name, lang)
-                
-                answer_parts.append(f"{i}. **{company_name}** • {format_amount_string(doc['amount'])}")
-                if doc.get('year'):
-                    answer_parts.append(f" • {doc['year']}")
-                if sector_name:
-                    answer_parts.append(f" • {sector_name}")
-            # For simple queries, use clean English template
-            if query_type == 'simple' or query_type == 'trend':
-                # Calculate total funding
-                total_funding = sum(parse_amount_to_numeric(doc['amount']) for doc in retrieved_docs)
-                
-                answer_parts = []
-                answer_parts.append(f"**Total {len(retrieved_docs)} companies, ₹{format_indian_number(total_funding/10_000_000)} Cr total funding**\n\n")
-            
-            # Return template response immediately - don't call LLM
-            return {
-                "answer": answer,
-                "sources": [{"company": doc['company'], "amount": doc['amount'], "sector": doc.get('sector', ''), "city": doc.get('city', ''), "state": doc.get('state', ''), "investors": doc.get('investors', ''), "date": doc.get('date', ''), "year": doc.get('year', '')} for doc in retrieved_docs[:5]]
-            }
-        else:
-            # For English, use template format too for consistency
-            logger.info(f"Using template format for English language")
-            
-            # Detect query type
-            query_type = detect_query_type(query, 'en')
-            logger.info(f"Query type detected: {query_type}")
-            
-            # Handle aggregation queries
-            if query_type == 'aggregation':
-                answer = handle_aggregation_query(query, 'en', retrieved_docs)
-            elif query_type == 'comparison':
-                answer = handle_comparison_query(query, 'en', retrieved_docs)
-                if not answer:
-                    query_type = 'simple'
-            
-            # For simple queries, use clean English template
-            if query_type == 'simple' or query_type == 'trend':
-                # Calculate total funding
-                total_funding = sum(parse_amount_to_numeric(doc['amount']) for doc in retrieved_docs)
-                
-                answer_parts = []
-                answer_parts.append(f"**Total {len(retrieved_docs)} companies, ₹{format_indian_number(total_funding/10_000_000)} Cr total funding**\n\n")
-                
-                # Find most funded company if asked
-                if 'most funded' in query.lower() or 'top funded' in query.lower() or 'highest' in query.lower():
-                    # Group by company and sum funding
-                    company_totals = {}
-                    company_details = {}
-                    for doc in retrieved_docs:
-                        company = doc['company']
-                        amount = parse_amount_to_numeric(doc['amount'])
-                        if company not in company_totals:
-                            company_totals[company] = 0
-                            company_details[company] = []
-                        company_totals[company] += amount
-                        company_details[company].append(doc)
-                    
-                    # Find top company
-                    top_company = max(company_totals.items(), key=lambda x: x[1])
-                    company_name = top_company[0]
-                    total_amount = top_company[1]
-                    
-                    answer_parts.append(f"**Most funded company is {company_name}**\n\n")
-                    answer_parts.append(f"Total funding: ₹{format_indian_number(total_amount/10_000_000)} Cr across {len(company_details[company_name])} rounds\n\n")
-                    answer_parts.append(f"**Funding Rounds:**\n\n")
-                    
-                    for i, doc in enumerate(company_details[company_name][:10], 1):
-                        answer_parts.append(f"{i}. {format_amount_string(doc['amount'])}")
-                        if doc.get('date'):
-                            answer_parts.append(f" • {doc['date']}")
-                        if doc.get('sector'):
-                            answer_parts.append(f" • {doc['sector']}")
-                        if doc.get('city'):
-                            answer_parts.append(f" • {doc['city']}")
-                        answer_parts.append(f"\n")
-                    
-                    answer_parts.append(f"\n**Key Insights:**\n\n")
-                    if company_details[company_name]:
-                        largest_round = max(company_details[company_name], key=lambda x: parse_amount_to_numeric(x['amount']))
-                        answer_parts.append(f"• Largest round: {format_amount_string(largest_round['amount'])}")
-                        if largest_round.get('year'):
-                            answer_parts.append(f" ({largest_round['year']})")
-                        answer_parts.append(f"\n")
-                        if largest_round.get('sector'):
-                            answer_parts.append(f"• Primary sector: {largest_round['sector']}\n")
-                else:
-                    # Regular listing
-                    answer_parts.append(f"**Companies:**\n\n")
-                    for i, doc in enumerate(retrieved_docs[:15], 1):
-                        answer_parts.append(f"{i}. **{doc['company']}** • {format_amount_string(doc['amount'])}")
-                        if doc.get('year'):
-                            answer_parts.append(f" • {doc['year']}")
-                        if doc.get('sector') and doc['sector'] != 'Unknown':
-                            answer_parts.append(f" • {doc['sector']}")
-                        if doc.get('city') and doc['city'] != 'Unknown':
-                            answer_parts.append(f" • {doc['city']}")
-                        answer_parts.append(f"\n")
-                
-                answer = "".join(answer_parts)
-            
-            logger.info(f"English template response generated ({len(answer)} chars)")
-        
-    except Exception as e:
-        # Fallback to template-based generation if Ollama fails
-        logger.error(f"Ollama generation failed: {e}, using template fallback")
-        logger.error(f"Exception type: {type(e).__name__}")
-        logger.debug("Exception traceback:", exc_info=True)
-        top_result = retrieved_docs[0]
-        
-        date_info = f" in {top_result['year']}" if top_result.get('year') and top_result['year'] != 'Unknown' and top_result['year'] != '' else ""
-        sector_info = f" in {top_result['sector']}" if top_result.get('sector') and top_result['sector'] != 'Unknown' and top_result['sector'] != '' else ""
-        
-        if lang == "hi":
-            sector = f" {top_result['sector']} सेक्टर में" if top_result.get('sector') and top_result['sector'] != 'Unknown' else ""
-            answer = f"{top_result['company']} को {top_result['amount']} की फंडिंग मिली{date_info}।{sector} {top_result['city']} में स्थित है।"
-        elif lang == "mr":
-            sector = f" {top_result['sector']} क्षेत्रात" if top_result.get('sector') and top_result['sector'] != 'Unknown' else ""
-            answer = f"{top_result['company']} ला {top_result['amount']} निधी मिळाला{date_info}.{sector} {top_result['city']} येथे आहे."
-        elif lang == "gu":
-            sector = f" {top_result['sector']} સેક્ટરમાં" if top_result.get('sector') and top_result['sector'] != 'Unknown' else ""
-            answer = f"{top_result['company']} ને {top_result['amount']} ફંડિંગ મળ્યું{date_info}.{sector} {top_result['city']} માં આવેલું છે."
-        elif lang == "ta":
-            sector = f" {top_result['sector']} துறையில்" if top_result.get('sector') and top_result['sector'] != 'Unknown' else ""
-            answer = f"{top_result['company']} நிறுவனம் {top_result['amount']} நிதியளிப்பு பெற்றது{date_info}.{sector} {top_result['city']} இல் அமைந்துள்ளது."
-        elif lang == "te":
-            sector = f" {top_result['sector']} రంగంలో" if top_result.get('sector') and top_result['sector'] != 'Unknown' else ""
-            answer = f"{top_result['company']} కు {top_result['amount']} ఫండింగ్ లభించింది{date_info}.{sector} {top_result['city']} లో ఉంది."
-        elif lang == "kn":
-            sector = f" {top_result['sector']} ವಲಯದಲ್ಲಿ" if top_result.get('sector') and top_result['sector'] != 'Unknown' else ""
-            answer = f"{top_result['company']} ಗೆ {top_result['amount']} ಫಂಡಿಂಗ್ ಸಿಕ್ಕಿತು{date_info}.{sector} {top_result['city']} ನಲ್ಲಿದೆ."
-        elif lang == "bn":
-            sector = f" {top_result['sector']} সেক্টরে" if top_result.get('sector') and top_result['sector'] != 'Unknown' else ""
-            answer = f"{top_result['company']} {top_result['amount']} ফান্ডিং পেয়েছে{date_info}.{sector} {top_result['city']} এ অবস্থিত।"
-        else:  # English
-            sector = f" in the {top_result['sector']} sector" if top_result.get('sector') and top_result['sector'] != 'Unknown' and top_result['sector'] != '' else ""
-            state = f", {top_result['state']}" if top_result.get('state') and top_result['state'] != 'Unknown' and top_result['state'] != '' else ""
-            city = top_result.get('city', '')
-            if city and city != 'Unknown':
-                location = f" Located in {city}{state}."
+                answer = f"**Total Funding: {total_str}** from {unique_companies} companies\n\n**Top Companies:**\n{company_list}"
             else:
-                location = ""
-            answer = f"{top_result['company']} received {top_result['amount']} in funding{date_info}.{sector}{location}"
-    
-    # Only return sources for English queries to avoid showing English labels
-    formatted_sources = []
-    if lang == "en":
+                answer = "Sorry, I couldn't find relevant information. Please try a different query."
+        
+        # Return the LLM-generated response
+        formatted_sources = []
         for doc in retrieved_docs[:5]:
             formatted_sources.append({
                 'company': doc['company'],
                 'amount': doc['amount'],
-                'sector': doc['sector'],
-                'city': doc['city'],
-                'state': doc['state'],
+                'sector': doc.get('sector', ''),
+                'city': doc.get('city', ''),
+                'state': doc.get('state', ''),
                 'date': doc.get('date', ''),
                 'year': doc.get('year', '')
             })
-    
-    return {
-        "answer": answer,
-        "sources": formatted_sources
-    }
+        
+        return {
+            "answer": answer,
+            "sources": formatted_sources
+        }
+        
+    except Exception as e:
+        # Fallback if anything fails in the pipeline
+        logger.error(f"Pipeline error: {e}")
+        return {
+            "answer": "Sorry, an error occurred processing your request. Please try again.",
+            "sources": []
+        }
 
 @app.on_event("startup")
 async def startup_event():
@@ -1728,7 +2045,7 @@ async def get_company_info(company_name: str, lang: str = "en"):
             "year": str(row.get('Year', 'Unknown')),
             "investors": row.get('Investors', 'Not disclosed'),
             "sector": row.get('Sector', 'Unknown'),
-            "city": row.get('City_Standardized', 'Unknown'),
+            "city": row.get('City', 'Unknown'),
             "state": row.get('State_Standardized', 'Unknown')
         })
     
@@ -1840,7 +2157,7 @@ async def get_insights():
                 })
         
         # 4. OVERALL STATS
-        total_funding = valid_df['Amount_Cleaned'].sum()
+        total_funding = valid_df['Amount_Numeric'].sum()
         total_deals = len(valid_df)
         avg_deal = total_funding / total_deals if total_deals > 0 else 0
         

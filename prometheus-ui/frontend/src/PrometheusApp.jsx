@@ -66,13 +66,25 @@ export default function PrometheusApp() {
   }, []);
 
   useEffect(() => {
+    // Speech recognition language mapping for all supported languages
+    const speechLangMap = {
+      en: 'en-US',
+      hi: 'hi-IN',
+      ta: 'ta-IN',
+      te: 'te-IN',
+      kn: 'kn-IN',
+      mr: 'mr-IN',
+      gu: 'gu-IN',
+      bn: 'bn-IN'
+    };
+
     // Initialize speech recognition
     if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       recognitionRef.current = new SpeechRecognition();
       recognitionRef.current.continuous = false;
       recognitionRef.current.interimResults = false;
-      recognitionRef.current.lang = language === 'en' ? 'en-US' : 'hi-IN';
+      recognitionRef.current.lang = speechLangMap[language] || 'en-US';
 
       recognitionRef.current.onresult = (event) => {
         const transcript = event.results[0][0].transcript;
@@ -208,13 +220,29 @@ export default function PrometheusApp() {
     );
   }
 
+  // Dynamic theme classes
+  const glassCard = theme === 'dark' 
+    ? 'bg-white/5 backdrop-blur-xl border border-white/10' 
+    : 'bg-white/80 backdrop-blur-xl border border-gray-200 shadow-lg';
+  
+  const textMain = theme === 'dark' ? 'text-white' : 'text-gray-900';
+  const textMuted = theme === 'dark' ? 'text-gray-400' : 'text-gray-600';
+  const textSubtle = theme === 'dark' ? 'text-gray-300' : 'text-gray-700';
+  const inputBg = theme === 'dark' ? 'bg-transparent text-white placeholder-gray-400' : 'bg-transparent text-gray-900 placeholder-gray-500';
+  const menuHover = theme === 'dark' ? 'hover:bg-cyan-500/20' : 'hover:bg-cyan-100';
+  const menuActive = theme === 'dark' ? 'bg-cyan-500/30' : 'bg-cyan-200';
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 transition-colors duration-500 overflow-hidden">
+    <div className={`min-h-screen transition-colors duration-500 overflow-hidden ${
+      theme === 'dark' 
+        ? 'bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900' 
+        : 'bg-gradient-to-br from-gray-50 via-white to-cyan-50'
+    }`}>
       {/* Animated Background */}
       <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-purple-500/20 rounded-full blur-3xl animate-pulse"></div>
-        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-blue-500/20 rounded-full blur-3xl animate-pulse" style={{animationDelay: '1s'}}></div>
-        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl animate-pulse" style={{animationDelay: '2s'}}></div>
+        <div className={`absolute top-1/4 left-1/4 w-96 h-96 rounded-full blur-3xl animate-pulse ${theme === 'dark' ? 'bg-purple-500/20' : 'bg-purple-300/20'}`}></div>
+        <div className={`absolute bottom-1/4 right-1/4 w-96 h-96 rounded-full blur-3xl animate-pulse ${theme === 'dark' ? 'bg-blue-500/20' : 'bg-blue-300/20'}`} style={{animationDelay: '1s'}}></div>
+        <div className={`absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-96 h-96 rounded-full blur-3xl animate-pulse ${theme === 'dark' ? 'bg-cyan-500/10' : 'bg-cyan-300/20'}`} style={{animationDelay: '2s'}}></div>
       </div>
 
       <style>{`
@@ -223,6 +251,12 @@ export default function PrometheusApp() {
         }
         .text-gradient {
           background: linear-gradient(135deg, #22d3ee 0%, #a78bfa 100%);
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          background-clip: text;
+        }
+        .text-gradient-light {
+          background: linear-gradient(135deg, #0891b2 0%, #7c3aed 100%);
           -webkit-background-clip: text;
           -webkit-text-fill-color: transparent;
           background-clip: text;
@@ -237,18 +271,13 @@ export default function PrometheusApp() {
         .recording-pulse {
           animation: pulse-glow 1.5s ease-in-out infinite;
         }
-        .glass-card {
-          background: rgba(255, 255, 255, 0.05);
-          backdrop-filter: blur(16px);
-          border: 1px solid rgba(255, 255, 255, 0.1);
-        }
       `}</style>
 
       {/* Header */}
       <motion.header 
         initial={{ y: -20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        className="glass-card border-b border-white/10 px-6 py-4 sticky top-0 z-50 relative"
+        className={`${glassCard} border-b ${theme === 'dark' ? 'border-white/10' : 'border-gray-200'} px-6 py-4 sticky top-0 z-50 relative`}
       >
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           {/* Logo and Title */}
@@ -260,16 +289,16 @@ export default function PrometheusApp() {
               <Sparkles className="w-6 h-6 text-white" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-gradient">{t.appName}</h1>
-              <p className="text-sm text-gray-400">{t.appSubtitle}</p>
+              <h1 className={`text-2xl font-bold ${theme === 'dark' ? 'text-gradient' : 'text-gradient-light'}`}>{t.appName}</h1>
+              <p className={`text-sm ${textMuted}`}>{t.appSubtitle}</p>
             </div>
           </motion.div>
 
           {/* Controls */}
           <div className="flex items-center gap-3">
             {/* User Info */}
-            <div className="px-4 py-2 rounded-xl glass-card">
-              <span className="text-sm text-white font-medium">👤 {username}</span>
+            <div className={`px-4 py-2 rounded-xl ${glassCard}`}>
+              <span className={`text-sm ${textMain} font-medium`}>👤 {username}</span>
             </div>
 
             {/* Language Selector */}
@@ -278,7 +307,7 @@ export default function PrometheusApp() {
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 onClick={() => setShowLanguageMenu(!showLanguageMenu)}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl glass-card text-white hover:border-cyan-500/50 transition-all"
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl ${glassCard} ${textMain} hover:border-cyan-500/50 transition-all`}
               >
                 <Globe className="w-4 h-4" />
                 <span className="text-lg">{currentLang.flag}</span>
@@ -289,7 +318,7 @@ export default function PrometheusApp() {
                 <motion.div
                   initial={{ opacity: 0, y: -10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="absolute top-full mt-2 right-0 glass-card rounded-xl shadow-2xl min-w-[180px] z-50 overflow-hidden"
+                  className={`absolute top-full mt-2 right-0 ${glassCard} rounded-xl shadow-2xl min-w-[180px] z-50 overflow-hidden`}
                 >
                   {languages.map((lang) => (
                     <button
@@ -298,12 +327,12 @@ export default function PrometheusApp() {
                         setLanguage(lang.code);
                         setShowLanguageMenu(false);
                       }}
-                      className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-cyan-500/20 transition-colors ${
-                        lang.code === language ? 'bg-cyan-500/30' : ''
+                      className={`w-full flex items-center gap-3 px-4 py-3 ${menuHover} transition-colors ${
+                        lang.code === language ? menuActive : ''
                       }`}
                     >
                       <span className="text-xl">{lang.flag}</span>
-                      <span className="text-sm text-white">{lang.name}</span>
+                      <span className={`text-sm ${textMain}`}>{lang.name}</span>
                     </button>
                   ))}
                 </motion.div>
@@ -315,7 +344,7 @@ export default function PrometheusApp() {
               whileHover={{ scale: 1.1, rotate: 180 }}
               whileTap={{ scale: 0.9 }}
               onClick={resetChat}
-              className="p-2 rounded-xl glass-card text-white hover:border-cyan-500/50 transition-all"
+              className={`p-2 rounded-xl ${glassCard} ${textMain} hover:border-cyan-500/50 transition-all`}
               title="Reset Chat"
             >
               <RotateCcw className="w-5 h-5" />
@@ -326,7 +355,7 @@ export default function PrometheusApp() {
               whileHover={{ scale: 1.1 }}
               whileTap={{ scale: 0.9 }}
               onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-              className="p-2 rounded-xl glass-card text-white hover:border-cyan-500/50 transition-all"
+              className={`p-2 rounded-xl ${glassCard} ${textMain} hover:border-cyan-500/50 transition-all`}
             >
               {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
             </motion.button>
@@ -336,7 +365,7 @@ export default function PrometheusApp() {
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={handleLogout}
-              className="px-4 py-2 rounded-xl glass-card text-red-300 hover:bg-red-500/20 hover:border-red-500/50 transition-all flex items-center gap-2"
+              className={`px-4 py-2 rounded-xl ${glassCard} ${theme === 'dark' ? 'text-red-300' : 'text-red-600'} hover:bg-red-500/20 hover:border-red-500/50 transition-all flex items-center gap-2`}
             >
               <LogOut className="w-4 h-4" />
               {t.logout}
@@ -347,24 +376,27 @@ export default function PrometheusApp() {
 
       {/* Tab Navigation */}
       <div className="max-w-7xl mx-auto px-6 pt-6 relative z-10">
-        <div className="flex gap-2 glass-card rounded-xl p-2">
+        <div className={`flex gap-2 ${glassCard} rounded-xl p-2`}>
           <TabButton 
             active={activeTab === 'chat'} 
             onClick={() => setActiveTab('chat')}
             icon={MessageSquare}
             label={t.chat}
+            theme={theme}
           />
           <TabButton 
             active={activeTab === 'history'} 
             onClick={() => setActiveTab('history')}
             icon={History}
             label={t.history}
+            theme={theme}
           />
           <TabButton 
             active={activeTab === 'insights'} 
             onClick={() => setActiveTab('insights')}
             icon={LineChart}
             label={t.insights}
+            theme={theme}
           />
         </div>
       </div>
@@ -391,7 +423,7 @@ export default function PrometheusApp() {
                 </motion.h2>
                 
                 <motion.p 
-                  className="text-xl text-gray-300 max-w-3xl mx-auto"
+                  className={`text-xl ${textSubtle} max-w-3xl mx-auto`}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ delay: 0.4 }}
@@ -406,7 +438,7 @@ export default function PrometheusApp() {
                   transition={{ delay: 0.6 }}
                   className="space-y-6 mt-12"
                 >
-                  <h3 className="text-lg font-semibold text-gray-400">{t.suggestedQuestions}</h3>
+                  <h3 className={`text-lg font-semibold ${textMuted}`}>{t.suggestedQuestions}</h3>
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {suggestedQuestions.map((q, idx) => (
@@ -418,13 +450,13 @@ export default function PrometheusApp() {
                         whileHover={{ scale: 1.02, y: -2 }}
                         whileTap={{ scale: 0.98 }}
                         onClick={() => handleSuggestedQuestion(t[q.textKey])}
-                        className="glass-card rounded-xl p-6 text-left hover:border-cyan-500/50 transition-all group"
+                        className={`${glassCard} rounded-xl p-6 text-left hover:border-cyan-500/50 transition-all group`}
                       >
                         <div className="flex items-start gap-4">
                           <div className={`p-3 rounded-xl bg-gradient-to-br ${q.color} group-hover:scale-110 transition-transform shadow-lg`}>
                             <q.icon className="w-6 h-6 text-white" />
                           </div>
-                          <p className="text-base text-white flex-1">{t[q.textKey]}</p>
+                          <p className={`text-base ${textMain} flex-1`}>{t[q.textKey]}</p>
                         </div>
                       </motion.button>
                     ))}
@@ -448,7 +480,7 @@ export default function PrometheusApp() {
                         className={`max-w-3xl px-6 py-4 rounded-2xl ${
                           msg.role === 'user'
                             ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-lg shadow-cyan-500/50'
-                            : 'glass-card text-white'
+                            : `${glassCard} ${textMain}`
                         } shadow-lg`}
                       >
                         {msg.role === 'assistant' && (
@@ -481,7 +513,7 @@ export default function PrometheusApp() {
                     animate={{ opacity: 1 }}
                     className="flex justify-start"
                   >
-                    <div className="glass-card px-6 py-4 rounded-2xl">
+                    <div className={`${glassCard} px-6 py-4 rounded-2xl`}>
                       <div className="flex items-center gap-2">
                         <div className="w-2 h-2 bg-cyan-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
                         <div className="w-2 h-2 bg-cyan-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
@@ -501,7 +533,7 @@ export default function PrometheusApp() {
         )}
 
         {activeTab === 'insights' && (
-          <Insights />
+          <Insights theme={theme} />
         )}
       </main>
 
@@ -511,10 +543,10 @@ export default function PrometheusApp() {
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ delay: 0.3 }}
-          className="fixed bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-slate-900/95 to-transparent backdrop-blur-sm z-50"
+          className={`fixed bottom-0 left-0 right-0 p-6 backdrop-blur-sm z-50 ${theme === 'dark' ? 'bg-gradient-to-t from-slate-900/95 to-transparent' : 'bg-gradient-to-t from-white/95 to-transparent'}`}
         >
           <div className="max-w-4xl mx-auto">
-            <div className="glass-card rounded-2xl shadow-2xl overflow-hidden">
+            <div className={`${glassCard} rounded-2xl shadow-2xl overflow-hidden`}>
               <div className="flex items-center gap-3 p-4">
                 <input
                   type="text"
@@ -522,7 +554,7 @@ export default function PrometheusApp() {
                   onChange={(e) => setInput(e.target.value)}
                   onKeyPress={(e) => e.key === 'Enter' && !isLoading && handleSend()}
                   placeholder={t.placeholder}
-                  className="flex-1 bg-transparent text-white placeholder-gray-400 outline-none text-base"
+                  className={`flex-1 bg-transparent outline-none text-base ${inputBg}`}
                   disabled={isLoading}
                 />
                 
@@ -530,10 +562,10 @@ export default function PrometheusApp() {
                   whileHover={{ scale: 1.1 }}
                   whileTap={{ scale: 0.9 }}
                   onClick={toggleRecording}
-                  className={`p-3 rounded-xl ${isRecording ? 'bg-red-500 recording-pulse shadow-lg shadow-red-500/50' : 'glass-card hover:bg-white/10'} transition-all`}
+                  className={`p-3 rounded-xl ${isRecording ? 'bg-red-500 recording-pulse shadow-lg shadow-red-500/50' : `${glassCard} ${theme === 'dark' ? 'hover:bg-white/10' : 'hover:bg-gray-100'}`} transition-all`}
                   disabled={isLoading}
                 >
-                  <Mic className={`w-5 h-5 ${isRecording ? 'text-white' : 'text-gray-300'}`} />
+                  <Mic className={`w-5 h-5 ${isRecording ? 'text-white' : textMuted}`} />
                 </motion.button>
 
                 <motion.button
@@ -557,7 +589,7 @@ export default function PrometheusApp() {
 }
 
 // Tab Button Component
-function TabButton({ active, onClick, icon: Icon, label }) {
+function TabButton({ active, onClick, icon: Icon, label, theme }) {
   return (
     <motion.button
       whileHover={{ scale: 1.02 }}
@@ -566,7 +598,7 @@ function TabButton({ active, onClick, icon: Icon, label }) {
       className={`flex items-center gap-2 px-6 py-3 rounded-xl transition-all ${
         active 
           ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-lg shadow-cyan-500/50' 
-          : 'bg-transparent text-gray-400 hover:bg-white/5'
+          : `bg-transparent ${theme === 'dark' ? 'text-gray-400 hover:bg-white/5' : 'text-gray-600 hover:bg-gray-100'}`
       }`}
     >
       <Icon className="w-4 h-4" />

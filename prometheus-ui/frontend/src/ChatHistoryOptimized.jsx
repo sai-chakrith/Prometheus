@@ -44,7 +44,7 @@ export default function ChatHistoryOptimized({ token }) {
       if (selectedLanguage) params.append('language', selectedLanguage);
       if (debouncedSearch) params.append('search', debouncedSearch);
       
-      const response = await api.get(`/chat-history?${params}`, {
+      const response = await api.get(`/api/chat-history?${params}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       
@@ -75,7 +75,7 @@ export default function ChatHistoryOptimized({ token }) {
     if (!confirm('Delete this chat?')) return;
     
     try {
-      await api.delete(`/chat-history/${chatId}`, {
+      await api.delete(`/api/chat-history/${chatId}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       
@@ -91,7 +91,7 @@ export default function ChatHistoryOptimized({ token }) {
     if (!confirm('Clear all chat history? This cannot be undone.')) return;
     
     try {
-      await api.delete('/chat-history', {
+      await api.delete('/api/chat-history', {
         headers: { Authorization: `Bearer ${token}` }
       });
       

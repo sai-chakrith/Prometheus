@@ -4,7 +4,11 @@ Saves ~15-25 seconds per query!
 """
 import json
 import os
+import logging
 from typing import Dict, Optional
+
+# Configure logger
+logger = logging.getLogger(__name__)
 
 CACHE_FILE = "translation_cache.json"
 
@@ -27,7 +31,7 @@ class TranslationCache:
     def save(self):
         """Save cache to disk"""
         try:
-            with open(cache_file, 'w', encoding='utf-8') as f:
+            with open(CACHE_FILE, 'w', encoding='utf-8') as f:
                 json.dump(self.cache, f, ensure_ascii=False, indent=2)
         except IOError as e:
             logger.warning(f"Could not save cache file: {e}")
